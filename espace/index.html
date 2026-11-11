@@ -2,8 +2,9 @@
 <!--
   FC Gouesnou - Espace club (application Supabase)
   Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
-  Rôle : page de test de la connexion (Google pour les comptes fcgouesnou.com)
-  Version : 0.1 - 11/11/2026 - première page de test, sera remplacée par l'application
+  Rôle : page de test de la connexion (Google pour les comptes fcgouesnou.com, code par e-mail pour les parents et joueurs)
+  Version : 0.2 - 11/11/2026 - ajout de la connexion par code reçu par e-mail
+  Historique : 0.1 - 11/11/2026 - première page de test (connexion Google)
 -->
 <html lang="fr">
 <head>
@@ -14,16 +15,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
   <style>
-    :root { --bleu: #1a3a8f; --bleu-clair: #e8eefb; --texte: #1d2433; --gris: #6b7280; --rouge: #b42318; }
+    :root { --bleu: #1a3a8f; --bleu-clair: #e8eefb; --texte: #1d2433; --gris: #6b7280; --rouge: #b42318; --vert: #067647; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, system-ui, sans-serif; color: var(--texte); background: #f5f7fb; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
     .carte { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(26, 58, 143, .12); padding: 32px 28px; width: 100%; max-width: 380px; text-align: center; }
     h1 { font-family: "Barlow Condensed", sans-serif; font-weight: 600; color: var(--bleu); font-size: 2rem; margin: 0 0 4px; }
     .sous-titre { color: var(--gris); margin: 0 0 28px; }
     button { width: 100%; border: 0; border-radius: 10px; padding: 14px; font: 600 1rem Inter, sans-serif; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
     .principal { background: var(--bleu); color: #fff; }
     .secondaire { background: var(--bleu-clair); color: var(--bleu); margin-top: 12px; }
+    .lien { background: none; color: var(--gris); font-weight: 400; font-size: .9rem; padding: 10px; margin-top: 4px; }
+    input { width: 100%; border: 1px solid #cfd6e4; border-radius: 10px; padding: 13px; font: 1rem Inter, sans-serif; margin-bottom: 12px; }
+    input:focus { outline: 2px solid var(--bleu); border-color: transparent; }
+    #code { text-align: center; font-size: 1.5rem; letter-spacing: 6px; font-weight: 600; }
+    .separateur { display: flex; align-items: center; gap: 10px; color: var(--gris); font-size: .85rem; margin: 22px 0; }
+    .separateur::before, .separateur::after { content: ""; flex: 1; height: 1px; background: #e2e6ef; }
     .etat { background: var(--bleu-clair); border-radius: 10px; padding: 14px; margin-bottom: 16px; word-break: break-word; }
+    .info { color: var(--vert); font-size: .9rem; margin: 0 0 14px; }
     .erreur { color: var(--rouge); margin-top: 16px; font-size: .9rem; }
     .pied { color: var(--gris); font-size: .8rem; margin-top: 24px; }
     [hidden] { display: none !important; }
@@ -34,17 +43,35 @@
     <h1>Espace club</h1>
     <p class="sous-titre">FC Gouesnou</p>
 
+    <!-- Choix de la méthode de connexion -->
     <section id="deconnecte" hidden>
       <button class="principal" id="btnGoogle">Se connecter avec Google</button>
+      <p class="pied" style="margin-top:8px;">Pour les comptes fcgouesnou.com</p>
+      <div class="separateur">ou</div>
+      <form id="formEmail">
+        <input type="email" id="email" placeholder="Votre adresse e-mail" autocomplete="email" required>
+        <button class="secondaire" id="btnCode" type="submit" style="margin-top:0;">Recevoir un code par e-mail</button>
+      </form>
     </section>
 
+    <!-- Saisie du code reçu -->
+    <section id="saisieCode" hidden>
+      <p class="info" id="infoCode"></p>
+      <form id="formCode">
+        <input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" required>
+        <button class="principal" id="btnValider" type="submit">Valider le code</button>
+      </form>
+      <button class="lien" id="btnRetour">Changer d'adresse ou renvoyer un code</button>
+    </section>
+
+    <!-- Connecté -->
     <section id="connecte" hidden>
-      <div class="etat">Connecté : <strong id="email"></strong></div>
+      <div class="etat">Connecté : <strong id="emailConnecte"></strong></div>
       <button class="secondaire" id="btnSortir">Se déconnecter</button>
     </section>
 
     <p class="erreur" id="erreur" hidden></p>
-    <p class="pied">Page de test - version 0.1</p>
+    <p class="pied">Page de test - version 0.2</p>
   </main>
 
   <script type="module">
@@ -59,26 +86,50 @@
     });
 
     const $ = (id) => document.getElementById(id);
+    let emailEnCours = '';
 
     function afficherErreur(texte) {
-      $('erreur').textContent = texte;
-      $('erreur').hidden = false;
+      $('erreur').textContent = texte || '';
+      $('erreur').hidden = !texte;
+    }
+
+    function ecran(nom) {
+      ['deconnecte', 'saisieCode', 'connecte'].forEach((id) => { $(id).hidden = (id !== nom); });
     }
 
     function afficher(session) {
-      const connecte = !!session;
-      $('connecte').hidden = !connecte;
-      $('deconnecte').hidden = connecte;
-      if (connecte) $('email').textContent = session.user.email;
+      if (session) {
+        $('emailConnecte').textContent = session.user.email;
+        ecran('connecte');
+      } else if (!emailEnCours) {
+        ecran('deconnecte');
+      }
     }
 
-    // Erreur renvoyée par Supabase après la connexion (dans l'adresse)
+    // Traduction des messages d'erreur les plus courants
+    function messageErreur(error) {
+      const m = (error && error.message || '').toLowerCase();
+      if (m.includes('signups not allowed') || m.includes('user not found')) {
+        return "Cette adresse n'est pas connue du club. Utilisez l'adresse donnée lors de l'inscription, ou contactez le secrétariat.";
+      }
+      if (m.includes('expired') || m.includes('invalid')) {
+        return 'Code incorrect ou expiré. Vérifiez le dernier e-mail reçu, ou demandez un nouveau code.';
+      }
+      if (m.includes('rate limit') || m.includes('security purposes')) {
+        return 'Trop de demandes rapprochées. Patientez une minute avant de redemander un code.';
+      }
+      return 'Erreur : ' + (error && error.message || 'inconnue');
+    }
+
+    // Erreur renvoyée par Supabase après une connexion Google (dans l'adresse)
     const params = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
     if (params.get('error_description')) {
       afficherErreur('Connexion refusée : ' + params.get('error_description'));
     }
 
+    // Connexion Google
     $('btnGoogle').addEventListener('click', async () => {
+      afficherErreur('');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -86,7 +137,44 @@
           queryParams: { hd: 'fcgouesnou.com', prompt: 'select_account' }
         }
       });
-      if (error) afficherErreur(error.message);
+      if (error) afficherErreur(messageErreur(error));
+    });
+
+    // Demande d'un code par e-mail (uniquement pour une adresse déjà connue)
+    $('formEmail').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      afficherErreur('');
+      const email = $('email').value.trim().toLowerCase();
+      $('btnCode').disabled = true;
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false }
+      });
+      $('btnCode').disabled = false;
+      if (error) { afficherErreur(messageErreur(error)); return; }
+      emailEnCours = email;
+      $('infoCode').textContent = 'Un code a été envoyé à ' + email + '. Pensez à regarder dans les courriers indésirables.';
+      $('code').value = '';
+      ecran('saisieCode');
+      $('code').focus();
+    });
+
+    // Vérification du code
+    $('formCode').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      afficherErreur('');
+      const token = $('code').value.replace(/\D/g, '');
+      $('btnValider').disabled = true;
+      const { error } = await supabase.auth.verifyOtp({ email: emailEnCours, token, type: 'email' });
+      $('btnValider').disabled = false;
+      if (error) { afficherErreur(messageErreur(error)); return; }
+      emailEnCours = '';
+    });
+
+    $('btnRetour').addEventListener('click', () => {
+      emailEnCours = '';
+      afficherErreur('');
+      ecran('deconnecte');
     });
 
     $('btnSortir').addEventListener('click', async () => {
