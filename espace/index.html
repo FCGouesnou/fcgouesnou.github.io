@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!--
+  FC Gouesnou - Espace club (application Supabase)
+  Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
+  Rôle : page de test de la connexion (Google pour les comptes fcgouesnou.com)
+  Version : 0.1 - 11/11/2026 - première page de test, sera remplacée par l'application
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Espace club - FC Gouesnou</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bleu: #1a3a8f; --bleu-clair: #e8eefb; --texte: #1d2433; --gris: #6b7280; --rouge: #b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; color: var(--texte); background: #f5f7fb; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .carte { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(26, 58, 143, .12); padding: 32px 28px; width: 100%; max-width: 380px; text-align: center; }
+    h1 { font-family: "Barlow Condensed", sans-serif; font-weight: 600; color: var(--bleu); font-size: 2rem; margin: 0 0 4px; }
+    .sous-titre { color: var(--gris); margin: 0 0 28px; }
+    button { width: 100%; border: 0; border-radius: 10px; padding: 14px; font: 600 1rem Inter, sans-serif; cursor: pointer; }
+    .principal { background: var(--bleu); color: #fff; }
+    .secondaire { background: var(--bleu-clair); color: var(--bleu); margin-top: 12px; }
+    .etat { background: var(--bleu-clair); border-radius: 10px; padding: 14px; margin-bottom: 16px; word-break: break-word; }
+    .erreur { color: var(--rouge); margin-top: 16px; font-size: .9rem; }
+    .pied { color: var(--gris); font-size: .8rem; margin-top: 24px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="carte">
+    <h1>Espace club</h1>
+    <p class="sous-titre">FC Gouesnou</p>
+
+    <section id="deconnecte" hidden>
+      <button class="principal" id="btnGoogle">Se connecter avec Google</button>
+    </section>
+
+    <section id="connecte" hidden>
+      <div class="etat">Connecté : <strong id="email"></strong></div>
+      <button class="secondaire" id="btnSortir">Se déconnecter</button>
+    </section>
+
+    <p class="erreur" id="erreur" hidden></p>
+    <p class="pied">Page de test - version 0.1</p>
+  </main>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
+    const SUPABASE_CLE = 'sb_publishable_uEaNogIeXycWb3cIL7rumg_8udo1u_0';
+    const ADRESSE_APPLI = 'https://fcgouesnou.github.io/espace/';
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_CLE, {
+      auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
+    });
+
+    const $ = (id) => document.getElementById(id);
+
+    function afficherErreur(texte) {
+      $('erreur').textContent = texte;
+      $('erreur').hidden = false;
+    }
+
+    function afficher(session) {
+      const connecte = !!session;
+      $('connecte').hidden = !connecte;
+      $('deconnecte').hidden = connecte;
+      if (connecte) $('email').textContent = session.user.email;
+    }
+
+    // Erreur renvoyée par Supabase après la connexion (dans l'adresse)
+    const params = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
+    if (params.get('error_description')) {
+      afficherErreur('Connexion refusée : ' + params.get('error_description'));
+    }
+
+    $('btnGoogle').addEventListener('click', async () => {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: ADRESSE_APPLI,
+          queryParams: { hd: 'fcgouesnou.com', prompt: 'select_account' }
+        }
+      });
+      if (error) afficherErreur(error.message);
+    });
+
+    $('btnSortir').addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      afficher(null);
+    });
+
+    supabase.auth.onAuthStateChange((_evenement, session) => {
+      afficher(session);
+      if (session && (location.search || location.hash)) {
+        history.replaceState(null, '', ADRESSE_APPLI);
+      }
+    });
+
+    const { data } = await supabase.auth.getSession();
+    afficher(data.session);
+  </script>
+</body>
+</html>
