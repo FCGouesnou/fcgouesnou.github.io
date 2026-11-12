@@ -2,197 +2,572 @@
 <!--
   FC Gouesnou - Espace club (application Supabase)
   Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
-  Rôle : page de test de la connexion (Google pour les comptes fcgouesnou.com, code par e-mail pour les parents et joueurs)
-  Version : 0.2.1 - 12/11/2026 - premier code possible pour toute adresse connue du club (filtre côté Supabase)
+  Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
+         réponses aux convocations, vue coach (création d'événements, suivi des réponses)
+  Version : 0.3 - 12/11/2026 - écran « À venir », réponse en un geste, désistement, vue coach
   Historique :
-    0.2 - 11/11/2026 - ajout de la connexion par code reçu par e-mail
-    0.1 - 11/11/2026 - première page de test (connexion Google)
+    0.2.1 - 12/11/2026 - premier code possible pour toute adresse connue du club
+    0.2   - 11/11/2026 - connexion par code reçu par e-mail
+    0.1   - 11/11/2026 - page de test de la connexion Google
 -->
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1a3a8f">
   <title>Espace club - FC Gouesnou</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
   <style>
-    :root { --bleu: #1a3a8f; --bleu-clair: #e8eefb; --texte: #1d2433; --gris: #6b7280; --rouge: #b42318; --vert: #067647; }
+    :root { --bleu: #1a3a8f; --bleu-clair: #e8eefb; --texte: #1d2433; --gris: #6b7280; --gris-clair: #eef0f4;
+            --rouge: #b42318; --rouge-clair: #fdecea; --vert: #067647; --vert-clair: #e7f6ec; --orange: #b54708; --orange-clair: #fef4e6; }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; color: var(--texte); background: #f5f7fb; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-    .carte { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(26, 58, 143, .12); padding: 32px 28px; width: 100%; max-width: 380px; text-align: center; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; color: var(--texte); background: #f5f7fb; }
+    button, input, select, textarea { font: inherit; }
+    [hidden] { display: none !important; }
+
+    /* Connexion */
+    .centre { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .carte-connexion { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(26,58,143,.12); padding: 32px 28px; width: 100%; max-width: 380px; text-align: center; }
     h1 { font-family: "Barlow Condensed", sans-serif; font-weight: 600; color: var(--bleu); font-size: 2rem; margin: 0 0 4px; }
     .sous-titre { color: var(--gris); margin: 0 0 28px; }
-    button { width: 100%; border: 0; border-radius: 10px; padding: 14px; font: 600 1rem Inter, sans-serif; cursor: pointer; }
-    button:disabled { opacity: .6; cursor: wait; }
+    .btn { width: 100%; border: 0; border-radius: 10px; padding: 14px; font-weight: 600; cursor: pointer; }
+    .btn:disabled { opacity: .6; cursor: wait; }
     .principal { background: var(--bleu); color: #fff; }
-    .secondaire { background: var(--bleu-clair); color: var(--bleu); margin-top: 12px; }
-    .lien { background: none; color: var(--gris); font-weight: 400; font-size: .9rem; padding: 10px; margin-top: 4px; }
-    input { width: 100%; border: 1px solid #cfd6e4; border-radius: 10px; padding: 13px; font: 1rem Inter, sans-serif; margin-bottom: 12px; }
-    input:focus { outline: 2px solid var(--bleu); border-color: transparent; }
+    .secondaire { background: var(--bleu-clair); color: var(--bleu); }
+    .lien { background: none; border: 0; color: var(--gris); font-size: .9rem; padding: 10px; cursor: pointer; }
+    .champ { width: 100%; border: 1px solid #cfd6e4; border-radius: 10px; padding: 13px; margin-bottom: 12px; background: #fff; }
+    .champ:focus { outline: 2px solid var(--bleu); border-color: transparent; }
     #code { text-align: center; font-size: 1.5rem; letter-spacing: 6px; font-weight: 600; }
     .separateur { display: flex; align-items: center; gap: 10px; color: var(--gris); font-size: .85rem; margin: 22px 0; }
     .separateur::before, .separateur::after { content: ""; flex: 1; height: 1px; background: #e2e6ef; }
-    .etat { background: var(--bleu-clair); border-radius: 10px; padding: 14px; margin-bottom: 16px; word-break: break-word; }
     .info { color: var(--vert); font-size: .9rem; margin: 0 0 14px; }
     .erreur { color: var(--rouge); margin-top: 16px; font-size: .9rem; }
-    .pied { color: var(--gris); font-size: .8rem; margin-top: 24px; }
-    [hidden] { display: none !important; }
+    .erreur a { color: var(--rouge); }
+    .petit { color: var(--gris); font-size: .8rem; }
+
+    /* Application */
+    .entete { position: sticky; top: 0; z-index: 5; background: var(--bleu); color: #fff; padding: 12px 16px calc(12px) ; display: flex; align-items: center; gap: 12px; }
+    .entete h2 { font-family: "Barlow Condensed", sans-serif; font-weight: 600; font-size: 1.5rem; margin: 0; flex: 1; }
+    .entete button { background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: .85rem; }
+    .contenu { max-width: 640px; margin: 0 auto; padding: 16px 12px 96px; }
+    .onglets { display: flex; gap: 8px; margin-bottom: 14px; }
+    .onglet { flex: 1; border: 0; background: #fff; border-radius: 10px; padding: 10px; color: var(--gris); font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .onglet.actif { background: var(--bleu); color: #fff; }
+    .bonjour { color: var(--gris); margin: 4px 4px 14px; font-size: .95rem; }
+    .vide { text-align: center; color: var(--gris); padding: 40px 12px; }
+    .jour { font-weight: 600; color: var(--gris); font-size: .85rem; margin: 18px 4px 8px; }
+    .evt { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 14px; margin-bottom: 10px; }
+    .evt.annule { opacity: .65; }
+    .evt-tete { display: flex; gap: 10px; align-items: flex-start; }
+    .pastille { font-size: .72rem; font-weight: 600; border-radius: 6px; padding: 3px 7px; white-space: nowrap; }
+    .p-match { background: var(--orange-clair); color: var(--orange); }
+    .p-entrainement { background: var(--bleu-clair); color: var(--bleu); }
+    .p-autre { background: var(--gris-clair); color: var(--gris); }
+    .p-annule { background: var(--rouge-clair); color: var(--rouge); }
+    .p-modifie { background: var(--orange-clair); color: var(--orange); }
+    .evt-titre { font-weight: 600; flex: 1; }
+    .evt-detail { color: var(--gris); font-size: .88rem; margin-top: 4px; line-height: 1.45; }
+    .consignes { background: var(--gris-clair); border-radius: 8px; padding: 8px 10px; font-size: .85rem; margin-top: 8px; white-space: pre-wrap; }
+    .personne { border-top: 1px solid var(--gris-clair); margin-top: 12px; padding-top: 10px; }
+    .personne-nom { font-size: .88rem; font-weight: 500; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+    .reponses { display: flex; gap: 6px; }
+    .rep { flex: 1; border: 1.5px solid #d5dbe7; background: #fff; border-radius: 10px; padding: 10px 4px; font-weight: 600; font-size: .88rem; cursor: pointer; color: var(--texte); }
+    .rep.present.choisi { background: var(--vert); border-color: var(--vert); color: #fff; }
+    .rep.absent.choisi { background: var(--rouge); border-color: var(--rouge); color: #fff; }
+    .rep.incertain.choisi { background: var(--orange); border-color: var(--orange); color: #fff; }
+    .rep:disabled { cursor: default; opacity: .55; }
+    .motif { display: flex; gap: 6px; margin-top: 8px; }
+    .motif input { flex: 1; margin: 0; padding: 9px; }
+    .motif button { border: 0; background: var(--bleu); color: #fff; border-radius: 8px; padding: 0 12px; cursor: pointer; }
+    .note { font-size: .8rem; color: var(--gris); margin-top: 6px; }
+    .compteur { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: .8rem; }
+    .compteur span { border-radius: 6px; padding: 3px 8px; }
+    .c-present { background: var(--vert-clair); color: var(--vert); }
+    .c-absent { background: var(--rouge-clair); color: var(--rouge); }
+    .c-incertain { background: var(--orange-clair); color: var(--orange); }
+    .c-sans { background: var(--gris-clair); color: var(--gris); }
+    .details-liste { margin-top: 8px; font-size: .85rem; }
+    .details-liste summary { cursor: pointer; color: var(--bleu); font-weight: 500; }
+    .ligne-joueur { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--gris-clair); }
+    .ligne-joueur:last-child { border-bottom: 0; }
+    .actions-coach { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .mini { border: 0; border-radius: 8px; padding: 8px 10px; font-size: .82rem; font-weight: 600; cursor: pointer; background: var(--bleu-clair); color: var(--bleu); }
+    .mini.danger { background: var(--rouge-clair); color: var(--rouge); }
+    .flottant { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); background: var(--bleu); color: #fff; border: 0; border-radius: 28px; padding: 14px 20px; font-weight: 600; box-shadow: 0 6px 18px rgba(26,58,143,.35); cursor: pointer; }
+
+    /* Fenêtre */
+    .voile { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+    .fenetre { background: #fff; width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; border-radius: 18px 18px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom)); }
+    @media (min-width: 640px) { .voile { align-items: center; } .fenetre { border-radius: 18px; } }
+    .fenetre h3 { margin: 0 0 14px; font-family: "Barlow Condensed", sans-serif; font-weight: 600; font-size: 1.5rem; color: var(--bleu); }
+    .fenetre label { display: block; font-size: .82rem; font-weight: 600; color: var(--gris); margin-bottom: 4px; }
+    .deux { display: flex; gap: 10px; } .deux > div { flex: 1; }
+    .choix-joueurs { max-height: 240px; overflow: auto; border: 1px solid #e2e6ef; border-radius: 10px; padding: 6px 10px; margin-bottom: 12px; }
+    .choix-joueurs label { display: flex; gap: 8px; align-items: center; color: var(--texte); font-weight: 400; font-size: .92rem; padding: 6px 0; margin: 0; }
+    .boutons { display: flex; gap: 8px; margin-top: 6px; }
+    .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); background: #1d2433; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .9rem; z-index: 30; max-width: 90vw; }
   </style>
 </head>
 <body>
-  <main class="carte">
-    <h1>Espace club</h1>
-    <p class="sous-titre">FC Gouesnou</p>
 
-    <!-- Choix de la méthode de connexion -->
-    <section id="deconnecte" hidden>
-      <button class="principal" id="btnGoogle">Se connecter avec Google</button>
-      <p class="pied" style="margin-top:8px;">Pour les comptes fcgouesnou.com</p>
-      <div class="separateur">ou</div>
-      <form id="formEmail">
-        <input type="email" id="email" placeholder="Votre adresse e-mail" autocomplete="email" required>
-        <button class="secondaire" id="btnCode" type="submit" style="margin-top:0;">Recevoir un code par e-mail</button>
-      </form>
-    </section>
+  <!-- ===================== Connexion ===================== -->
+  <div id="ecranConnexion" class="centre" hidden>
+    <main class="carte-connexion">
+      <h1>Espace club</h1>
+      <p class="sous-titre">FC Gouesnou</p>
 
-    <!-- Saisie du code reçu -->
-    <section id="saisieCode" hidden>
-      <p class="info" id="infoCode"></p>
-      <form id="formCode">
-        <input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" required>
-        <button class="principal" id="btnValider" type="submit">Valider le code</button>
-      </form>
-      <button class="lien" id="btnRetour">Changer d'adresse ou renvoyer un code</button>
-    </section>
+      <section id="choixConnexion">
+        <button class="btn principal" id="btnGoogle">Se connecter avec Google</button>
+        <p class="petit" style="margin-top:8px;">Pour les comptes fcgouesnou.com</p>
+        <div class="separateur">ou</div>
+        <form id="formEmail">
+          <input class="champ" type="email" id="email" placeholder="Votre adresse e-mail" autocomplete="email" required>
+          <button class="btn secondaire" id="btnCode" type="submit">Recevoir un code par e-mail</button>
+        </form>
+      </section>
 
-    <!-- Connecté -->
-    <section id="connecte" hidden>
-      <div class="etat">Connecté : <strong id="emailConnecte"></strong></div>
-      <button class="secondaire" id="btnSortir">Se déconnecter</button>
-    </section>
+      <section id="saisieCode" hidden>
+        <p class="info" id="infoCode"></p>
+        <form id="formCode">
+          <input class="champ" type="text" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Code" required>
+          <button class="btn principal" id="btnValider" type="submit">Valider le code</button>
+        </form>
+        <button class="lien" id="btnRetour">Changer d'adresse ou renvoyer un code</button>
+      </section>
 
-    <p class="erreur" id="erreur" hidden></p>
-    <p class="pied">Page de test - version 0.2.1</p>
-  </main>
+      <p class="erreur" id="erreurConnexion" hidden></p>
+      <p class="petit" style="margin-top:24px;">Version 0.3 - pilote</p>
+    </main>
+  </div>
+
+  <!-- ===================== Application ===================== -->
+  <div id="ecranAppli" hidden>
+    <header class="entete">
+      <h2>Espace club</h2>
+      <button id="btnActualiser" title="Actualiser">Actualiser</button>
+      <button id="btnSortir">Sortir</button>
+    </header>
+    <div class="contenu">
+      <p class="bonjour" id="bonjour"></p>
+      <div class="onglets" id="onglets" hidden>
+        <button class="onglet actif" data-vue="avenir">À venir</button>
+        <button class="onglet" data-vue="coach">Mes équipes</button>
+      </div>
+      <div id="vueAvenir"></div>
+      <div id="vueCoach" hidden></div>
+    </div>
+    <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
+  </div>
+
+  <div id="fenetre" class="voile" hidden></div>
+  <div id="toast" class="toast" hidden></div>
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
+    // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
     const SUPABASE_CLE = 'sb_publishable_uEaNogIeXycWb3cIL7rumg_8udo1u_0';
     const ADRESSE_APPLI = 'https://fcgouesnou.github.io/espace/';
+    const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
+    const FUSEAU = 'Europe/Paris';
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_CLE, {
+    const sb = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
     });
 
     const $ = (id) => document.getElementById(id);
-    let emailEnCours = '';
-
-    function afficherErreur(texte) {
-      $('erreur').textContent = texte || '';
-      $('erreur').hidden = !texte;
-    }
-
-    function ecran(nom) {
-      ['deconnecte', 'saisieCode', 'connecte'].forEach((id) => { $(id).hidden = (id !== nom); });
-    }
-
-    function afficher(session) {
-      if (session) {
-        $('emailConnecte').textContent = session.user.email;
-        ecran('connecte');
-      } else if (!emailEnCours) {
-        ecran('deconnecte');
+    const el = (tag, attrs = {}, ...enfants) => {
+      const n = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'class') n.className = v;
+        else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+        else if (v !== undefined && v !== null && v !== false) n.setAttribute(k, v === true ? '' : v);
       }
-    }
+      for (const e of enfants.flat()) if (e !== null && e !== undefined && e !== false) n.append(e instanceof Node ? e : document.createTextNode(e));
+      return n;
+    };
 
-    // Traduction des messages d'erreur les plus courants
+    // ---------- État ----------
+    let session = null;
+    let emailEnCours = '';
+    const E = { fiches: [], personnes: new Map(), repondPour: new Set(), equipes: new Map(), coachees: new Set(),
+                evenements: [], convocations: [], resumes: new Map(), clubs: new Map() };
+
+    // ---------- Outils ----------
+    function toast(t) { const n = $('toast'); n.textContent = t; n.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => n.hidden = true, 3200); }
+    const fmtJour = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, weekday: 'long', day: 'numeric', month: 'long' });
+    const fmtHeure = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, hour: '2-digit', minute: '2-digit' });
+    const jourDe = (d) => { const s = fmtJour.format(new Date(d)); return s.charAt(0).toUpperCase() + s.slice(1); };
+    const heure = (d) => fmtHeure.format(new Date(d)).replace(':', ' h ');
+    const LIB_TYPE = { match: 'Match', entrainement: 'Entraînement', tournoi: 'Tournoi', reunion: 'Réunion', autre: 'Événement' };
+    const age = (p) => p.annee_naissance ? new Date().getFullYear() - p.annee_naissance : null;
+
     function messageErreur(error) {
       const m = (error && error.message || '').toLowerCase();
-      if (m.includes('pas connue du club') || m.includes('signups not allowed') || m.includes('user not found')) {
-        return "Cette adresse n'est pas connue du club. Utilisez l'adresse donnée lors de l'inscription, ou contactez le secrétariat.";
-      }
-      if (m.includes('expired') || m.includes('invalid')) {
-        return 'Code incorrect ou expiré. Vérifiez le dernier e-mail reçu, ou demandez un nouveau code.';
-      }
-      if (m.includes('rate limit') || m.includes('security purposes')) {
-        return 'Trop de demandes rapprochées. Patientez une minute avant de redemander un code.';
-      }
+      if (m.includes('pas connue du club') || m.includes('signups not allowed') || m.includes('user not found'))
+        return 'inconnue';
+      if (m.includes('expired') || m.includes('invalid')) return 'Code incorrect ou expiré. Vérifiez le dernier e-mail reçu, ou demandez un nouveau code.';
+      if (m.includes('rate limit') || m.includes('security purposes')) return 'Trop de demandes rapprochées. Patientez une minute avant de redemander un code.';
       return 'Erreur : ' + (error && error.message || 'inconnue');
     }
-
-    // Erreur renvoyée par Supabase après une connexion Google (dans l'adresse)
-    const params = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
-    if (params.get('error_description')) {
-      afficherErreur('Connexion refusée : ' + params.get('error_description'));
+    function erreurConnexion(texte) {
+      const n = $('erreurConnexion'); n.replaceChildren();
+      if (!texte) { n.hidden = true; return; }
+      if (texte === 'inconnue') {
+        n.append("Cette adresse n'est pas connue du club. Utilisez l'adresse donnée lors de l'inscription, ou contactez-nous par la rubrique ",
+                 el('a', { href: PAGE_CONTACT, target: '_blank', rel: 'noopener' }, '« Nous contacter »'), ' du site du FC Gouesnou.');
+      } else n.append(texte);
+      n.hidden = false;
     }
 
-    // Connexion Google
-    $('btnGoogle').addEventListener('click', async () => {
-      afficherErreur('');
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: ADRESSE_APPLI,
-          queryParams: { hd: 'fcgouesnou.com', prompt: 'select_account' }
-        }
-      });
-      if (error) afficherErreur(messageErreur(error));
-    });
+    // ---------- Connexion ----------
+    const params = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
+    if (params.get('error_description')) erreurConnexion(messageErreur({ message: params.get('error_description') }));
 
-    // Demande d'un code par e-mail (le filtre Supabase refuse toute adresse inconnue du club)
+    $('btnGoogle').addEventListener('click', async () => {
+      erreurConnexion('');
+      const { error } = await sb.auth.signInWithOAuth({ provider: 'google',
+        options: { redirectTo: ADRESSE_APPLI, queryParams: { hd: 'fcgouesnou.com', prompt: 'select_account' } } });
+      if (error) erreurConnexion(messageErreur(error));
+    });
     $('formEmail').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      afficherErreur('');
+      e.preventDefault(); erreurConnexion('');
       const email = $('email').value.trim().toLowerCase();
       $('btnCode').disabled = true;
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: true }
-      });
+      const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
       $('btnCode').disabled = false;
-      if (error) { afficherErreur(messageErreur(error)); return; }
+      if (error) { erreurConnexion(messageErreur(error)); return; }
       emailEnCours = email;
       $('infoCode').textContent = 'Un code a été envoyé à ' + email + '. Pensez à regarder dans les courriers indésirables.';
-      $('code').value = '';
-      ecran('saisieCode');
-      $('code').focus();
+      $('code').value = ''; $('choixConnexion').hidden = true; $('saisieCode').hidden = false; $('code').focus();
     });
-
-    // Vérification du code
     $('formCode').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      afficherErreur('');
-      const token = $('code').value.replace(/\D/g, '');
+      e.preventDefault(); erreurConnexion('');
       $('btnValider').disabled = true;
-      const { error } = await supabase.auth.verifyOtp({ email: emailEnCours, token, type: 'email' });
+      const { error } = await sb.auth.verifyOtp({ email: emailEnCours, token: $('code').value.replace(/\D/g, ''), type: 'email' });
       $('btnValider').disabled = false;
-      if (error) { afficherErreur(messageErreur(error)); return; }
-      emailEnCours = '';
+      if (error) erreurConnexion(messageErreur(error)); else emailEnCours = '';
     });
+    $('btnRetour').addEventListener('click', () => { emailEnCours = ''; erreurConnexion(''); $('saisieCode').hidden = true; $('choixConnexion').hidden = false; });
+    $('btnSortir').addEventListener('click', async () => { await sb.auth.signOut(); });
+    $('btnActualiser').addEventListener('click', () => charger());
 
-    $('btnRetour').addEventListener('click', () => {
-      emailEnCours = '';
-      afficherErreur('');
-      ecran('deconnecte');
-    });
+    // ---------- Chargement des données ----------
+    async function charger() {
+      const uid = session.user.id;
+      const { data: fiches, error: e1 } = await sb.from('personnes').select('id, prenom, nom, annee_naissance, club_id').eq('user_id', uid);
+      if (e1) { toast('Erreur de chargement : ' + e1.message); return; }
+      E.fiches = fiches || [];
+      E.personnes = new Map(E.fiches.map(p => [p.id, { ...p, moi: true }]));
+      E.repondPour = new Set(E.fiches.filter(p => age(p) === null || age(p) >= 18).map(p => p.id));
 
-    $('btnSortir').addEventListener('click', async () => {
-      await supabase.auth.signOut();
-      afficher(null);
-    });
-
-    supabase.auth.onAuthStateChange((_evenement, session) => {
-      afficher(session);
-      if (session && (location.search || location.hash)) {
-        history.replaceState(null, '', ADRESSE_APPLI);
+      if (E.fiches.length) {
+        const ids = E.fiches.map(p => p.id);
+        const { data: enfants } = await sb.from('liens_famille')
+          .select('enfant_id, enfant:personnes!liens_famille_enfant_id_fkey(id, prenom, nom, annee_naissance, club_id)')
+          .in('parent_id', ids);
+        for (const l of enfants || []) if (l.enfant) { E.personnes.set(l.enfant.id, { ...l.enfant, enfant: true }); E.repondPour.add(l.enfant.id); }
       }
+
+      const [{ data: mesEq }, { data: coachEq }] = await Promise.all([sb.rpc('mes_equipes'), sb.rpc('equipes_coachees')]);
+      E.coachees = new Set(coachEq || []);
+      const idsEq = [...new Set([...(mesEq || []), ...(coachEq || [])])];
+      E.equipes = new Map();
+      if (idsEq.length) {
+        const { data: eqs } = await sb.from('equipes').select('id, nom, categorie, club_id').in('id', idsEq);
+        for (const q of eqs || []) E.equipes.set(q.id, q);
+      }
+
+      E.evenements = []; E.convocations = []; E.resumes = new Map();
+      if (idsEq.length) {
+        const depuis = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+        const { data: evts } = await sb.from('evenements').select('*').in('equipe_id', idsEq).gte('debut', depuis).order('debut').limit(40);
+        E.evenements = evts || [];
+        const idsEvt = E.evenements.map(e => e.id);
+        const idsPers = [...E.personnes.keys()];
+        if (idsEvt.length && idsPers.length) {
+          const { data: cv } = await sb.from('convocations').select('evenement_id, personne_id, reponse, motif').in('evenement_id', idsEvt).in('personne_id', idsPers);
+          E.convocations = cv || [];
+        }
+        await Promise.all(idsEvt.map(async (id) => {
+          const { data } = await sb.rpc('convocations_evenement', { ev: id });
+          E.resumes.set(id, data || []);
+        }));
+      }
+      afficher();
+    }
+
+    // ---------- Affichage ----------
+    let vue = 'avenir';
+    function afficher() {
+      const moi = E.fiches[0];
+      $('bonjour').textContent = moi ? 'Bonjour ' + moi.prenom + '.' : 'Bonjour.';
+      const coach = E.coachees.size > 0;
+      $('onglets').hidden = !coach;
+      $('btnNouvel').hidden = !coach;
+      $('vueAvenir').hidden = vue !== 'avenir';
+      $('vueCoach').hidden = vue !== 'coach';
+      afficherAvenir();
+      if (coach) afficherCoach();
+    }
+    for (const b of document.querySelectorAll('.onglet')) b.addEventListener('click', () => {
+      vue = b.dataset.vue;
+      document.querySelectorAll('.onglet').forEach(x => x.classList.toggle('actif', x === b));
+      afficher();
     });
 
-    const { data } = await supabase.auth.getSession();
-    afficher(data.session);
+    function pastilles(evt) {
+      const t = evt.type === 'match' || evt.type === 'tournoi' ? 'p-match' : evt.type === 'entrainement' ? 'p-entrainement' : 'p-autre';
+      const r = [el('span', { class: 'pastille ' + t }, LIB_TYPE[evt.type] || 'Événement')];
+      if (evt.etat === 'annule') r.push(el('span', { class: 'pastille p-annule' }, 'Annulé'));
+      else if (evt.etat === 'modifie') r.push(el('span', { class: 'pastille p-modifie' }, 'Modifié'));
+      return r;
+    }
+    function titre(evt) {
+      const eq = E.equipes.get(evt.equipe_id);
+      if (evt.type === 'match' || evt.type === 'tournoi')
+        return (eq ? eq.nom : '') + (evt.adversaire ? (evt.domicile === false ? ' chez ' : ' contre ') + evt.adversaire : '') + (evt.titre ? ' - ' + evt.titre : '');
+      return (evt.titre || LIB_TYPE[evt.type]) + (eq ? ' - ' + eq.nom : '');
+    }
+    function details(evt) {
+      const l = [];
+      let h = heure(evt.debut) + (evt.fin ? ' à ' + heure(evt.fin) : '');
+      if (evt.rendez_vous) h += ' (rendez-vous ' + heure(evt.rendez_vous) + ')';
+      l.push(h);
+      if (evt.lieu || evt.adresse) l.push([evt.lieu, evt.adresse].filter(Boolean).join(', '));
+      return l;
+    }
+    function compteur(evt) {
+      const r = E.resumes.get(evt.id) || [];
+      if (!r.length) return null;
+      const n = { present: 0, absent: 0, incertain: 0, sans_reponse: 0 };
+      for (const x of r) if (x.reponse) n[x.reponse]++;
+      return el('div', { class: 'compteur' },
+        el('span', { class: 'c-present' }, n.present + ' présent' + (n.present > 1 ? 's' : '')),
+        el('span', { class: 'c-absent' }, n.absent + ' absent' + (n.absent > 1 ? 's' : '')),
+        n.incertain ? el('span', { class: 'c-incertain' }, n.incertain + ' incertain' + (n.incertain > 1 ? 's' : '')) : null,
+        el('span', { class: 'c-sans' }, n.sans_reponse + ' sans réponse'));
+    }
+    function listeConvoques(evt) {
+      const r = E.resumes.get(evt.id) || [];
+      if (!r.length) return null;
+      const lib = { present: 'Présent', absent: 'Absent', incertain: 'Incertain', sans_reponse: 'Sans réponse' };
+      return el('details', { class: 'details-liste' }, el('summary', {}, 'Voir les convoqués (' + r.length + ')'),
+        r.map(x => el('div', { class: 'ligne-joueur' }, el('span', {}, x.prenom + ' ' + x.initiale + '.'), el('span', {}, lib[x.reponse] || '-'))));
+    }
+
+    function blocReponse(evt, cv) {
+      const p = E.personnes.get(cv.personne_id);
+      const peut = E.repondPour.has(cv.personne_id) && evt.etat !== 'annule';
+      const nom = p ? (p.moi ? 'Moi' : p.prenom) : '';
+      const tard = evt.date_limite && new Date(evt.date_limite) < new Date();
+      const bloc = el('div', { class: 'personne' },
+        el('div', { class: 'personne-nom' }, el('span', {}, nom),
+          tard && cv.reponse === 'sans_reponse' ? el('span', { class: 'petit', style: 'color:var(--rouge)' }, 'Date limite dépassée') : null));
+      const zone = el('div', { class: 'reponses' });
+      for (const [val, lib] of [['present', 'Présent'], ['absent', 'Absent'], ['incertain', 'Incertain']]) {
+        zone.append(el('button', { class: 'rep ' + val + (cv.reponse === val ? ' choisi' : ''), disabled: !peut,
+          onclick: () => repondre(evt, cv, val, bloc) }, lib));
+      }
+      bloc.append(zone);
+      if (!peut && evt.etat !== 'annule') bloc.append(el('div', { class: 'note' }, 'La réponse est donnée par un parent.'));
+      if (cv.motif && (cv.reponse === 'absent' || cv.reponse === 'incertain')) bloc.append(el('div', { class: 'note' }, 'Motif : ' + cv.motif));
+      return bloc;
+    }
+
+    async function repondre(evt, cv, val, bloc) {
+      if (cv.reponse === val) return;
+      const desistement = cv.reponse === 'present' && val !== 'present';
+      const avant = cv.reponse;
+      cv.reponse = val;
+      const { error } = await sb.from('convocations').update({ reponse: val }).eq('evenement_id', evt.id).eq('personne_id', cv.personne_id);
+      if (error) { cv.reponse = avant; toast('Réponse non enregistrée : ' + error.message); afficher(); return; }
+      const r = (E.resumes.get(evt.id) || []);
+      const { data } = await sb.rpc('convocations_evenement', { ev: evt.id }); E.resumes.set(evt.id, data || r);
+      afficher();
+      toast(desistement ? 'Désistement enregistré. Le coach le verra dans sa liste.' : 'Réponse enregistrée.');
+      if (val !== 'present') demanderMotif(evt, cv);
+    }
+
+    function demanderMotif(evt, cv) {
+      ouvrirFenetre('Motif (facultatif)', (f) => {
+        const champ = el('input', { class: 'champ', placeholder: 'Ex. malade, vacances, examen', maxlength: 120, value: cv.motif || '' });
+        f.append(el('p', { class: 'petit' }, 'Seul le coach voit le motif.'), champ,
+          el('div', { class: 'boutons' },
+            el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Passer'),
+            el('button', { class: 'btn principal', onclick: async () => {
+              const motif = champ.value.trim() || null;
+              const { error } = await sb.from('convocations').update({ motif }).eq('evenement_id', evt.id).eq('personne_id', cv.personne_id);
+              if (error) { toast('Motif non enregistré : ' + error.message); return; }
+              cv.motif = motif; fermerFenetre(); afficher(); toast('Motif enregistré.');
+            } }, 'Enregistrer')));
+        setTimeout(() => champ.focus(), 50);
+      });
+    }
+
+    function carteEvenement(evt, avecReponses) {
+      const c = el('div', { class: 'evt' + (evt.etat === 'annule' ? ' annule' : '') },
+        el('div', { class: 'evt-tete' }, el('div', { class: 'evt-titre' }, titre(evt)), ...pastilles(evt)),
+        el('div', { class: 'evt-detail' }, details(evt).map(t => el('div', {}, t))),
+        evt.consignes ? el('div', { class: 'consignes' }, evt.consignes) : null);
+      if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) c.append(blocReponse(evt, cv));
+      const cpt = compteur(evt); if (cpt) c.append(cpt);
+      return c;
+    }
+
+    function afficherAvenir() {
+      const zone = $('vueAvenir'); zone.replaceChildren();
+      const mesEvt = new Set(E.convocations.map(c => c.evenement_id));
+      const liste = E.evenements.filter(e => mesEvt.has(e.id) || E.coachees.has(e.equipe_id));
+      if (!E.fiches.length) { zone.append(el('p', { class: 'vide' }, "Votre compte n'est relié à aucune fiche du club. Contactez-nous par la rubrique « Nous contacter » du site.")); return; }
+      if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir pour le moment.')); return; }
+      let jour = '';
+      for (const evt of liste) {
+        const j = jourDe(evt.debut);
+        if (j !== jour) { jour = j; zone.append(el('div', { class: 'jour' }, j)); }
+        const c = carteEvenement(evt, true);
+        const l = listeConvoques(evt); if (l) c.append(l);
+        zone.append(c);
+      }
+    }
+
+    // ---------- Vue coach ----------
+    async function afficherCoach() {
+      const zone = $('vueCoach'); zone.replaceChildren();
+      const liste = E.evenements.filter(e => E.coachees.has(e.equipe_id));
+      if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir. Créez-en un avec le bouton « + Nouvel événement ».')); return; }
+      let jour = '';
+      for (const evt of liste) {
+        const j = jourDe(evt.debut);
+        if (j !== jour) { jour = j; zone.append(el('div', { class: 'jour' }, j)); }
+        const c = carteEvenement(evt, false);
+        const det = el('details', { class: 'details-liste' }, el('summary', {}, 'Réponses détaillées'));
+        det.addEventListener('toggle', async () => { if (det.open && det.children.length === 1) det.append(...await detailCoach(evt)); });
+        c.append(det, el('div', { class: 'actions-coach' },
+          el('button', { class: 'mini', onclick: () => formulaireEvenement(evt) }, 'Modifier'),
+          evt.etat !== 'annule' ? el('button', { class: 'mini danger', onclick: () => annuler(evt) }, 'Annuler l\'événement') : null));
+        zone.append(c);
+      }
+    }
+
+    async function detailCoach(evt) {
+      const { data, error } = await sb.from('convocations')
+        .select('personne_id, reponse, motif, desiste_le, personne:personnes!convocations_personne_id_fkey(prenom, nom)')
+        .eq('evenement_id', evt.id);
+      if (error) return [el('p', { class: 'petit' }, 'Erreur : ' + error.message)];
+      const ordre = { sans_reponse: 0, incertain: 1, absent: 2, present: 3 };
+      const lib = { present: 'Présent', absent: 'Absent', incertain: 'Incertain', sans_reponse: 'Sans réponse' };
+      return (data || []).sort((a, b) => ordre[a.reponse] - ordre[b.reponse] || a.personne.nom.localeCompare(b.personne.nom))
+        .map(x => el('div', { class: 'ligne-joueur' },
+          el('span', {}, x.personne.prenom + ' ' + x.personne.nom),
+          el('span', {}, lib[x.reponse] + (x.desiste_le ? ' (désisté)' : '') + (x.motif ? ' - ' + x.motif : ''))));
+    }
+
+    async function annuler(evt) {
+      if (!confirm('Annuler cet événement ? Les convoqués verront qu\'il est annulé.')) return;
+      const { error } = await sb.from('evenements').update({ etat: 'annule' }).eq('id', evt.id);
+      if (error) { toast('Erreur : ' + error.message); return; }
+      toast('Événement annulé.'); charger();
+    }
+
+    // ---------- Fenêtre ----------
+    function ouvrirFenetre(t, remplir) {
+      const v = $('fenetre'); v.replaceChildren();
+      const f = el('div', { class: 'fenetre' }, el('h3', {}, t));
+      v.append(f); remplir(f); v.hidden = false;
+      v.onclick = (e) => { if (e.target === v) fermerFenetre(); };
+    }
+    function fermerFenetre() { $('fenetre').hidden = true; $('fenetre').replaceChildren(); }
+    $('btnNouvel').addEventListener('click', () => formulaireEvenement(null));
+
+    const versLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+    const versIso = (v) => v ? new Date(v).toISOString() : null;
+
+    async function formulaireEvenement(evt) {
+      const equipes = [...E.equipes.values()].filter(q => E.coachees.has(q.id));
+      ouvrirFenetre(evt ? 'Modifier l\'événement' : 'Nouvel événement', async (f) => {
+        const selEq = el('select', { class: 'champ' }, equipes.map(q => el('option', { value: q.id, selected: evt && evt.equipe_id === q.id }, q.nom)));
+        if (evt) selEq.disabled = true;
+        const selType = el('select', { class: 'champ' }, ['entrainement', 'match', 'tournoi', 'reunion', 'autre'].map(t => el('option', { value: t, selected: evt ? evt.type === t : t === 'entrainement' }, LIB_TYPE[t])));
+        if (evt) selType.disabled = true;
+        const debut = el('input', { class: 'champ', type: 'datetime-local', value: evt ? versLocal(evt.debut) : '', required: true });
+        const fin = el('input', { class: 'champ', type: 'datetime-local', value: evt ? versLocal(evt.fin) : '' });
+        const rdv = el('input', { class: 'champ', type: 'datetime-local', value: evt ? versLocal(evt.rendez_vous) : '' });
+        const lieu = el('input', { class: 'champ', placeholder: 'Ex. Stade de Kerloquin', value: evt ? evt.lieu || '' : '' });
+        const adv = el('input', { class: 'champ', placeholder: 'Ex. AS Brestoise', value: evt ? evt.adversaire || '' : '' });
+        const dom = el('select', { class: 'champ' }, el('option', { value: 'true', selected: !evt || evt.domicile !== false }, 'À domicile'), el('option', { value: 'false', selected: evt && evt.domicile === false }, 'À l\'extérieur'));
+        const consignes = el('textarea', { class: 'champ', rows: 3, placeholder: 'Ex. prévoir les deux maillots' }); consignes.value = evt ? evt.consignes || '' : '';
+        const blocMatch = el('div', {}, el('label', {}, 'Adversaire'), adv, el('label', {}, 'Lieu du match'), dom);
+        const choix = el('div', { class: 'choix-joueurs' });
+        const blocSel = el('div', {}, el('label', {}, 'Joueurs convoqués'), choix);
+        const note = el('p', { class: 'petit' }, 'Pour un entraînement, toute l\'équipe est convoquée automatiquement.');
+
+        async function joueurs() {
+          choix.replaceChildren(el('span', { class: 'petit' }, 'Chargement...'));
+          const { data } = await sb.from('membres_equipe').select('personne_id, role, personne:personnes(prenom, nom)').eq('equipe_id', selEq.value).eq('role', 'joueur');
+          choix.replaceChildren(...(data || []).sort((a, b) => a.personne.nom.localeCompare(b.personne.nom)).map(m =>
+            el('label', {}, el('input', { type: 'checkbox', value: m.personne_id, checked: true }), m.personne.prenom + ' ' + m.personne.nom)));
+        }
+        function maj() {
+          const t = selType.value;
+          blocMatch.hidden = !(t === 'match' || t === 'tournoi');
+          blocSel.hidden = evt || t === 'entrainement';
+          note.hidden = evt || t !== 'entrainement';
+          if (!blocSel.hidden && !choix.children.length) joueurs();
+        }
+        selType.addEventListener('change', maj); selEq.addEventListener('change', () => { choix.replaceChildren(); maj(); });
+
+        const enr = el('button', { class: 'btn principal' }, evt ? 'Enregistrer' : 'Créer et convoquer');
+        f.append(el('label', {}, 'Équipe'), selEq, el('label', {}, 'Type'), selType,
+          el('div', { class: 'deux' }, el('div', {}, el('label', {}, 'Début'), debut), el('div', {}, el('label', {}, 'Fin'), fin)),
+          el('label', {}, 'Rendez-vous (facultatif)'), rdv, el('label', {}, 'Lieu'), lieu, blocMatch,
+          el('label', {}, 'Consignes (facultatif)'), consignes, blocSel, note,
+          el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'), enr));
+        maj();
+
+        enr.addEventListener('click', async () => {
+          if (!debut.value) { toast('Indiquez la date et l\'heure de début.'); return; }
+          const t = selType.value;
+          const ligne = { debut: versIso(debut.value), fin: versIso(fin.value), rendez_vous: versIso(rdv.value),
+            lieu: lieu.value.trim() || null, consignes: consignes.value.trim() || null,
+            adversaire: (t === 'match' || t === 'tournoi') ? adv.value.trim() || null : null,
+            domicile: (t === 'match' || t === 'tournoi') ? dom.value === 'true' : null };
+          enr.disabled = true;
+          if (evt) {
+            const { error } = await sb.from('evenements').update(ligne).eq('id', evt.id);
+            enr.disabled = false;
+            if (error) { toast('Erreur : ' + error.message); return; }
+            fermerFenetre(); toast('Événement modifié.'); charger(); return;
+          }
+          const { data: cree, error } = await sb.from('evenements').insert({ ...ligne, equipe_id: selEq.value, type: t }).select('id').single();
+          if (error) { enr.disabled = false; toast('Erreur : ' + error.message); return; }
+          if (t !== 'entrainement') {
+            const ids = [...choix.querySelectorAll('input:checked')].map(i => i.value);
+            if (ids.length) {
+              const { error: e2 } = await sb.from('convocations').insert(ids.map(id => ({ evenement_id: cree.id, personne_id: id })));
+              if (e2) toast('Événement créé, mais convocations incomplètes : ' + e2.message);
+            }
+          }
+          enr.disabled = false; fermerFenetre(); toast('Événement créé et convocations envoyées dans l\'application.'); charger();
+        });
+      });
+    }
+
+    // ---------- Session ----------
+    function basculer(s) {
+      session = s;
+      $('ecranConnexion').hidden = !!s;
+      $('ecranAppli').hidden = !s;
+      if (s) setTimeout(() => charger(), 0);
+    }
+    sb.auth.onAuthStateChange((evenement, s) => {
+      if (s && (location.search || location.hash)) history.replaceState(null, '', ADRESSE_APPLI);
+      if (evenement === 'SIGNED_IN' || evenement === 'SIGNED_OUT' || evenement === 'INITIAL_SESSION') basculer(s);
+    });
   </script>
 </body>
 </html>
