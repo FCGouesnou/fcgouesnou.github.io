@@ -4,10 +4,14 @@
   Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
   Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
-         composition des équipes A, B, C d'une journée)
-  Version : 0.4.2 - 12/11/2026 - sondages SportEasy annulés masqués ; « À venir » limité à mes
-            équipes et à ma famille (l'administrateur gère les autres dans « Mes équipes »)
+         composition des équipes A, B, C d'une journée), application installable et notifications
+  Fichiers liés : espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
+  Version : 0.5 - 12/11/2026 - application installable (manifeste, service worker, icônes),
+            notifications : activation par appareil, test, consignes iPhone ; relance manuelle
+            des non-répondants par le coach ; appareil détaché du compte à la sortie
   Historique :
+    0.4.2 - 12/11/2026 - sondages SportEasy annulés masqués ; « À venir » limité à mes
+            équipes et à ma famille (l'administrateur gère les autres dans « Mes équipes »)
     0.4.1 - 12/11/2026 - version affichée en bas de l'application ; quatre semaines
             d'événements chargées (au lieu des 40 premiers)
     0.4   - 12/11/2026 - équipes A, B, C (U12-U13) : écran « Composer les équipes »,
@@ -26,7 +30,12 @@
   <meta name="theme-color" content="#1a3a8f">
   <title>Espace club - FC Gouesnou</title>
   <link rel="icon" type="image/png" href="../images/logo-fcg.png">
-  <link rel="apple-touch-icon" href="../images/logo-fcg.png">
+  <link rel="apple-touch-icon" href="icone-apple-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="FC Gouesnou">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
   <style>
@@ -121,6 +130,10 @@
     .actions-coach { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
     .mini { border: 0; border-radius: 8px; padding: 8px 10px; font-size: .82rem; font-weight: 600; cursor: pointer; background: var(--bleu-clair); color: var(--bleu); }
     .mini.danger { background: var(--rouge-clair); color: var(--rouge); }
+    .carte-notif { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 12px 14px; margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: .88rem; }
+    .carte-notif .texte { flex: 1; min-width: 200px; color: var(--texte); }
+    .carte-notif .texte small { display: block; color: var(--gris); margin-top: 2px; }
+    .carte-notif.ok { background: var(--vert-clair); box-shadow: none; }
     .flottant { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); background: var(--bleu); color: #fff; border: 0; border-radius: 28px; padding: 14px 20px; font-weight: 600; box-shadow: 0 6px 18px rgba(26,58,143,.35); cursor: pointer; }
 
     /* Fenêtre */
@@ -165,7 +178,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.4.2 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.5 - pilote</p>
     </main>
   </div>
 
@@ -179,13 +192,14 @@
     </header>
     <div class="contenu">
       <p class="bonjour" id="bonjour"></p>
+      <div id="carteNotif" class="carte-notif" hidden></div>
       <div class="onglets" id="onglets" hidden>
         <button class="onglet actif" data-vue="avenir">À venir</button>
         <button class="onglet" data-vue="coach">Mes équipes</button>
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.4.2 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.5 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -286,7 +300,10 @@
       if (error) erreurConnexion(messageErreur(error)); else emailEnCours = '';
     });
     $('btnRetour').addEventListener('click', () => { emailEnCours = ''; erreurConnexion(''); $('saisieCode').hidden = true; $('choixConnexion').hidden = false; });
-    $('btnSortir').addEventListener('click', async () => { await sb.auth.signOut(); });
+    $('btnSortir').addEventListener('click', async () => {
+      try { const sub = await abonnementActuel(); if (sub) await sb.from('appareils').delete().eq('endpoint', sub.endpoint); } catch (e) {}
+      await sb.auth.signOut();
+    });
     $('btnActualiser').addEventListener('click', () => charger());
 
     // ---------- Chargement des données ----------
@@ -494,7 +511,9 @@
         const c = carteEvenement(evt, false);
         const det = el('details', { class: 'details-liste' }, el('summary', {}, 'Réponses détaillées'));
         det.addEventListener('toggle', async () => { if (det.open && det.children.length === 1) det.append(...await detailCoach(evt)); });
+        const sansRep = (E.resumes.get(evt.id) || []).filter(x => x.reponse === 'sans_reponse').length;
         c.append(det, el('div', { class: 'actions-coach' },
+          sansRep && evt.etat !== 'annule' ? el('button', { class: 'mini', onclick: () => relancer(evt, sansRep) }, 'Relancer les ' + sansRep + ' sans réponse') : null,
           el('button', { class: 'mini', onclick: () => formulaireEvenement(evt) }, 'Modifier'),
           evt.etat !== 'annule' ? el('button', { class: 'mini danger', onclick: () => annuler(evt) }, 'Annuler l\'événement') : null));
         zone.append(c);
@@ -512,6 +531,13 @@
         .map(x => el('div', { class: 'ligne-joueur' },
           el('span', {}, x.personne.prenom + ' ' + x.personne.nom),
           el('span', {}, lib[x.reponse] + (x.desiste_le ? ' (désisté)' : '') + (x.motif ? ' - ' + x.motif : ''))));
+    }
+
+    async function relancer(evt, n) {
+      if (!confirm('Envoyer un rappel aux ' + n + ' convoqués sans réponse (ou à leurs parents) ?')) return;
+      const { data, error } = await sb.rpc('relancer_evenement', { p_evt: evt.id });
+      if (error) { toast('Erreur : ' + error.message); return; }
+      toast(data ? 'Rappel envoyé pour ' + data + ' convoqué' + (data > 1 ? 's' : '') + '.' : 'Rappel déjà envoyé il y a moins de 6 heures.');
     }
 
     async function annuler(evt) {
@@ -679,12 +705,96 @@
       });
     }
 
+    // ---------- Application installable et notifications ----------
+    const estIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const estInstallee = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    const pushPossible = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    let invitationInstall = null;
+    let enregistrementSW = null;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(r => { enregistrementSW = r; if (session) majCarteNotif(); }).catch(() => {});
+      navigator.serviceWorker.addEventListener('message', (e) => { if (e.data === 'actualiser' && session) charger(); });
+    }
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); invitationInstall = e; if (session) majCarteNotif(); });
+
+    async function abonnementActuel() {
+      if (!pushPossible) return null;
+      const r = enregistrementSW || await navigator.serviceWorker.ready;
+      return r.pushManager.getSubscription();
+    }
+    function versOctets(b64) {
+      const p = '='.repeat((4 - b64.length % 4) % 4);
+      const brut = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/'));
+      return Uint8Array.from([...brut].map(c => c.charCodeAt(0)));
+    }
+    async function enregistrer(sub) {
+      const j = sub.toJSON();
+      const { error } = await sb.rpc('enregistrer_appareil', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+      if (error) throw error;
+    }
+    async function activerNotifications(bouton) {
+      bouton.disabled = true;
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') { toast('Notifications refusées. Vous pourrez les autoriser plus tard dans les réglages.'); majCarteNotif(); return; }
+        const { data: cle, error } = await sb.rpc('cle_notifications');
+        if (error || !cle) throw error || new Error('clé indisponible');
+        const r = enregistrementSW || await navigator.serviceWorker.ready;
+        const sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: versOctets(cle) });
+        await enregistrer(sub);
+        toast('Notifications activées sur cet appareil.');
+      } catch (e) {
+        toast('Activation impossible : ' + (e && e.message || e));
+      }
+      bouton.disabled = false;
+      majCarteNotif();
+    }
+    async function majCarteNotif() {
+      const c = $('carteNotif'); c.replaceChildren(); c.className = 'carte-notif'; c.hidden = false;
+      const texte = (t, petit) => el('div', { class: 'texte' }, t, petit ? el('small', {}, petit) : null);
+      if (estIOS && !estInstallee) {
+        c.append(texte('Installez l\'application sur votre iPhone pour recevoir les notifications.',
+          'Dans Safari, touchez le bouton Partager, puis « Sur l\'écran d\'accueil ». Ouvrez ensuite l\'Espace club depuis sa nouvelle icône.'));
+        return;
+      }
+      if (!pushPossible) {
+        if (invitationInstall) c.append(texte('Installez l\'application sur cet appareil.'), installer());
+        else c.hidden = true;
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        c.append(texte('Les notifications sont bloquées sur cet appareil.', 'Autorisez-les dans les réglages du navigateur pour le site fcgouesnou.github.io.'));
+        return;
+      }
+      let sub = null; try { sub = await abonnementActuel(); } catch (e) {}
+      if (sub && Notification.permission === 'granted') {
+        try { await enregistrer(sub); } catch (e) {}
+        c.classList.add('ok');
+        c.append(texte('Notifications activées sur cet appareil.', 'Convocations, changements, relances et désistements. Rien entre 21 h et 8 h, sauf une annulation du jour.'),
+          el('button', { class: 'mini', onclick: async () => {
+            const { error } = await sb.rpc('notification_test');
+            toast(error ? 'Erreur : ' + error.message : 'Notification de test envoyée : elle arrive dans la minute.');
+          } }, 'Tester'));
+        if (invitationInstall) c.append(installer());
+        return;
+      }
+      const b = el('button', { class: 'mini', onclick: () => activerNotifications(b) }, 'Activer');
+      c.append(texte('Recevez vos convocations et les changements de programme sur cet appareil.'), b);
+      if (invitationInstall) c.append(installer());
+    }
+    function installer() {
+      return el('button', { class: 'mini', onclick: async () => {
+        if (!invitationInstall) return;
+        invitationInstall.prompt(); await invitationInstall.userChoice; invitationInstall = null; majCarteNotif();
+      } }, 'Installer l\'application');
+    }
+
     // ---------- Session ----------
     function basculer(s) {
       session = s;
       $('ecranConnexion').hidden = !!s;
       $('ecranAppli').hidden = !s;
-      if (s) setTimeout(() => charger(), 0);
+      if (s) setTimeout(() => { charger(); majCarteNotif(); }, 0);
     }
     sb.auth.onAuthStateChange((evenement, s) => {
       if (s && (location.search || location.hash)) history.replaceState(null, '', ADRESSE_APPLI);
