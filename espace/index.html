@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.8 - 12/11/2026 - Partenaires 1.1 : tableau de bord, documents avec les contrats, casse à l'enregistrement
+  Version : 0.8.1 - 12/11/2026 - carte des notifications affichée une seule fois
+           0.8 - 12/11/2026 - Partenaires 1.1 : tableau de bord, documents avec les contrats, casse à l'enregistrement
            0.7 - 12/11/2026 - onglet « Partenaires » (module espace/partenaires.js) pour le CODIR
             (consultation) et la commission partenaires (modification)
   Historique :
@@ -233,7 +234,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.8 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.8.1 - pilote</p>
     </main>
   </div>
 
@@ -256,7 +257,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.8 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.8.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -887,8 +888,13 @@
       bouton.disabled = false;
       majCarteNotif();
     }
+    let majNotifN = 0;
     async function majCarteNotif() {
-      const c = $('carteNotif'); c.replaceChildren(); c.className = 'carte-notif'; c.hidden = false;
+      // Plusieurs appels peuvent se croiser (démarrage, connexion) : seul le dernier remplit la carte
+      const n = ++majNotifN;
+      const c = $('carteNotif');
+      const pret = () => { if (n !== majNotifN) return false; c.replaceChildren(); c.className = 'carte-notif'; c.hidden = false; return true; };
+      if (!pret()) return;
       const texte = (t, petit) => el('div', { class: 'texte' }, t, petit ? el('small', {}, petit) : null);
       if (estIOS && !estInstallee) {
         c.append(texte('Installez l\'application sur votre iPhone pour recevoir les notifications.',
@@ -905,8 +911,10 @@
         return;
       }
       let sub = null; try { sub = await abonnementActuel(); } catch (e) {}
+      if (!pret()) return;
       if (sub && Notification.permission === 'granted') {
         try { await enregistrer(sub); } catch (e) {}
+        if (!pret()) return;
         c.classList.add('ok');
         c.append(texte('Notifications activées sur cet appareil.', 'Convocations, changements, relances et désistements. Rien entre 21 h et 8 h, sauf une annulation du jour.'),
           el('button', { class: 'mini', onclick: async () => {
