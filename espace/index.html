@@ -3,8 +3,10 @@
   FC Gouesnou - Espace club (application Supabase)
   Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
   Rôle : page de test de la connexion (Google pour les comptes fcgouesnou.com, code par e-mail pour les parents et joueurs)
-  Version : 0.2 - 11/11/2026 - ajout de la connexion par code reçu par e-mail
-  Historique : 0.1 - 11/11/2026 - première page de test (connexion Google)
+  Version : 0.2.1 - 12/11/2026 - premier code possible pour toute adresse connue du club (filtre côté Supabase)
+  Historique :
+    0.2 - 11/11/2026 - ajout de la connexion par code reçu par e-mail
+    0.1 - 11/11/2026 - première page de test (connexion Google)
 -->
 <html lang="fr">
 <head>
@@ -71,7 +73,7 @@
     </section>
 
     <p class="erreur" id="erreur" hidden></p>
-    <p class="pied">Page de test - version 0.2</p>
+    <p class="pied">Page de test - version 0.2.1</p>
   </main>
 
   <script type="module">
@@ -109,7 +111,7 @@
     // Traduction des messages d'erreur les plus courants
     function messageErreur(error) {
       const m = (error && error.message || '').toLowerCase();
-      if (m.includes('signups not allowed') || m.includes('user not found')) {
+      if (m.includes('pas connue du club') || m.includes('signups not allowed') || m.includes('user not found')) {
         return "Cette adresse n'est pas connue du club. Utilisez l'adresse donnée lors de l'inscription, ou contactez le secrétariat.";
       }
       if (m.includes('expired') || m.includes('invalid')) {
@@ -140,7 +142,7 @@
       if (error) afficherErreur(messageErreur(error));
     });
 
-    // Demande d'un code par e-mail (uniquement pour une adresse déjà connue)
+    // Demande d'un code par e-mail (le filtre Supabase refuse toute adresse inconnue du club)
     $('formEmail').addEventListener('submit', async (e) => {
       e.preventDefault();
       afficherErreur('');
@@ -148,7 +150,7 @@
       $('btnCode').disabled = true;
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: false }
+        options: { shouldCreateUser: true }
       });
       $('btnCode').disabled = false;
       if (error) { afficherErreur(messageErreur(error)); return; }
