@@ -4,8 +4,9 @@
   Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
   Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
          réponses aux convocations, vue coach (création d'événements, suivi des réponses)
-  Version : 0.3 - 12/11/2026 - écran « À venir », réponse en un geste, désistement, vue coach
+  Version : 0.3.1 - 12/11/2026 - logo du club (connexion, bandeau, icône)
   Historique :
+    0.3   - 12/11/2026 - écran « À venir », réponse en un geste, désistement, vue coach
     0.2.1 - 12/11/2026 - premier code possible pour toute adresse connue du club
     0.2   - 11/11/2026 - connexion par code reçu par e-mail
     0.1   - 11/11/2026 - page de test de la connexion Google
@@ -17,6 +18,8 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#1a3a8f">
   <title>Espace club - FC Gouesnou</title>
+  <link rel="icon" type="image/png" href="../images/logo-fcg.png">
+  <link rel="apple-touch-icon" href="../images/logo-fcg.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
   <style>
@@ -30,6 +33,8 @@
     /* Connexion */
     .centre { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
     .carte-connexion { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(26,58,143,.12); padding: 32px 28px; width: 100%; max-width: 380px; text-align: center; }
+    .logo-connexion { width: 96px; height: 96px; display: block; margin: 0 auto 12px; }
+    .logo-entete { width: 34px; height: 34px; background: #fff; border-radius: 50%; padding: 2px; }
     h1 { font-family: "Barlow Condensed", sans-serif; font-weight: 600; color: var(--bleu); font-size: 2rem; margin: 0 0 4px; }
     .sous-titre { color: var(--gris); margin: 0 0 28px; }
     .btn { width: 100%; border: 0; border-radius: 10px; padding: 14px; font-weight: 600; cursor: pointer; }
@@ -115,6 +120,7 @@
   <!-- ===================== Connexion ===================== -->
   <div id="ecranConnexion" class="centre" hidden>
     <main class="carte-connexion">
+      <img class="logo-connexion" src="../images/logo-fcg.png" alt="Logo du FC Gouesnou">
       <h1>Espace club</h1>
       <p class="sous-titre">FC Gouesnou</p>
 
@@ -138,13 +144,14 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.3 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.3.1 - pilote</p>
     </main>
   </div>
 
   <!-- ===================== Application ===================== -->
   <div id="ecranAppli" hidden>
     <header class="entete">
+      <img class="logo-entete" src="../images/logo-fcg.png" alt="">
       <h2>Espace club</h2>
       <button id="btnActualiser" title="Actualiser">Actualiser</button>
       <button id="btnSortir">Sortir</button>
