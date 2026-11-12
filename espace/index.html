@@ -5,10 +5,12 @@
   Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
-  Fichiers liés : espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.6 - 12/11/2026 - lieu choisi par commune puis terrain (référentiel Data ES des terrains
-            de football du Finistère), lien « Itinéraire » sur les événements
+  Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
+  Version : 0.7 - 12/11/2026 - onglet « Partenaires » (module espace/partenaires.js) pour le CODIR
+            (consultation) et la commission partenaires (modification)
   Historique :
+    0.6   - 12/11/2026 - lieu choisi par commune puis terrain (référentiel Data ES des terrains
+            de football du Finistère), lien « Itinéraire » sur les événements
     0.5.1 - 12/11/2026 - bouton « + Nouvel événement » affiché seulement dans « Mes équipes »
     0.5   - 12/11/2026 - application installable (manifeste, service worker, icônes),
             notifications : activation par appareil, test, consignes iPhone ; relance manuelle
@@ -104,6 +106,37 @@
     .seg button { min-width: 36px; border: 1.5px solid #d5dbe7; background: #fff; border-radius: 8px; padding: 7px 0; font-weight: 600; cursor: pointer; color: var(--texte); }
     .seg button.choisi { background: var(--bleu); border-color: var(--bleu); color: #fff; }
     .seg button.aucun.choisi { background: var(--gris); border-color: var(--gris); }
+    /* Partenaires */
+    .fenetre.large { max-width: 860px; }
+    .p-resume { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .p-resume div { background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .p-resume strong { display: block; font-size: 1.15rem; color: var(--bleu); }
+    .p-resume span { font-size: .78rem; color: var(--gris); }
+    .p-barre { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    .p-barre .champ { flex: 1; min-width: 180px; margin: 0; }
+    .p-liste { display: flex; flex-direction: column; gap: 6px; }
+    .p-ligne { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; text-align: left; width: 100%; border: 0; background: #fff; border-radius: 12px; padding: 11px 13px; box-shadow: 0 1px 3px rgba(0,0,0,.06); cursor: pointer; color: var(--texte); }
+    .p-ligne-nom { font-weight: 600; }
+    .p-ligne-nom small { display: block; font-weight: 400; color: var(--gris); font-size: .78rem; }
+    .p-ligne-info { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .p-marque { display: inline-block; background: var(--orange-clair); color: var(--orange); border-radius: 6px; padding: 2px 7px; font-size: .75rem; margin: 4px 4px 0 0; }
+    .p-onglets { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+    .p-onglets .onglet { flex: none; padding: 8px 12px; font-size: .85rem; background: var(--gris-clair); }
+    .p-onglets .onglet.actif { background: var(--bleu); }
+    .p-contrat { border: 1px solid #e2e6ef; border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+    .p-contrat-tete { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .p-contrat-tete .petit { flex: 1; }
+    .p-echeance { border-top: 1px solid var(--gris-clair); padding: 8px 0; }
+    .p-echeance-tete { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .p-echeance-tete > span:first-child { flex: 1; }
+    .p-paiement { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; font-size: .85rem; padding: 6px 0 6px 10px; border-left: 3px solid var(--bleu-clair); margin: 6px 0; }
+    .p-paiement > span:first-child { flex: 1; }
+    .p-boutons { display: flex; gap: 6px; }
+    .p-bloc { display: block; color: var(--gris); white-space: pre-wrap; margin-top: 3px; }
+    .p-titre { margin: 18px 0 4px; color: var(--bleu); }
+    .p-case { display: flex !important; gap: 8px; align-items: center; color: var(--texte) !important; margin: 4px 0 10px; }
+    .p-champ .champ { margin-bottom: 10px; }
+    a.mini { text-decoration: none; display: inline-block; }
     .itineraire { color: var(--bleu); font-weight: 500; text-decoration: none; }
     .compo-resume { position: sticky; top: -20px; background: #fff; padding: 8px 0; z-index: 1; }
     .evt-titre { font-weight: 600; flex: 1; }
@@ -182,7 +215,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.6 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.7 - pilote</p>
     </main>
   </div>
 
@@ -199,11 +232,13 @@
       <div id="carteNotif" class="carte-notif" hidden></div>
       <div class="onglets" id="onglets" hidden>
         <button class="onglet actif" data-vue="avenir">À venir</button>
-        <button class="onglet" data-vue="coach">Mes équipes</button>
+        <button class="onglet" data-vue="coach" hidden>Mes équipes</button>
+        <button class="onglet" data-vue="partenaires" hidden>Partenaires</button>
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.6 - pilote</p>
+      <div id="vuePartenaires" hidden></div>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.7 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -213,6 +248,7 @@
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+    import { initPartenaires } from './partenaires.js?v=1.0';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -360,21 +396,31 @@
 
     // ---------- Affichage ----------
     let vue = 'avenir';
+    let P = null, partenairesOk = false;
+    async function preparerPartenaires() {
+      if (!P) P = initPartenaires({ sb, el, toast });
+      partenairesOk = await P.initialiser();
+      document.querySelector('.onglet[data-vue="partenaires"]').hidden = !partenairesOk;
+      afficher();
+    }
     function afficher() {
       const moi = E.fiches[0];
       $('bonjour').textContent = moi ? 'Bonjour ' + moi.prenom + '.' : 'Bonjour.';
       const coach = E.coachees.size > 0;
-      $('onglets').hidden = !coach;
+      document.querySelector('.onglet[data-vue="coach"]').hidden = !coach;
+      $('onglets').hidden = !coach && !partenairesOk;
       $('btnNouvel').hidden = !coach || vue !== 'coach';
       $('vueAvenir').hidden = vue !== 'avenir';
       $('vueCoach').hidden = vue !== 'coach';
+      $('vuePartenaires').hidden = vue !== 'partenaires';
       afficherAvenir();
       if (coach) afficherCoach();
     }
-    for (const b of document.querySelectorAll('.onglet')) b.addEventListener('click', () => {
+    for (const b of document.querySelectorAll('#onglets .onglet')) b.addEventListener('click', () => {
       vue = b.dataset.vue;
-      document.querySelectorAll('.onglet').forEach(x => x.classList.toggle('actif', x === b));
+      document.querySelectorAll('#onglets .onglet').forEach(x => x.classList.toggle('actif', x === b));
       afficher();
+      if (vue === 'partenaires' && P) P.afficher($('vuePartenaires'));
     });
 
     function pastilles(evt) {
@@ -868,7 +914,7 @@
       session = s;
       $('ecranConnexion').hidden = !!s;
       $('ecranAppli').hidden = !s;
-      if (s) setTimeout(() => { charger(); majCarteNotif(); }, 0);
+      if (s) setTimeout(() => { charger(); majCarteNotif(); preparerPartenaires(); }, 0);
     }
     sb.auth.onAuthStateChange((evenement, s) => {
       if (s && (location.search || location.hash)) history.replaceState(null, '', ADRESSE_APPLI);
