@@ -3,9 +3,12 @@
   FC Gouesnou - Espace club (application Supabase)
   Fichier : espace/index.html (dépôt GitHub fcgouesnou.github.io)
   Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
-         réponses aux convocations, vue coach (création d'événements, suivi des réponses)
-  Version : 0.3.1 - 12/11/2026 - logo du club (connexion, bandeau, icône)
+         réponses aux convocations, vue coach (création d'événements, suivi des réponses,
+         composition des équipes A, B, C d'une journée)
+  Version : 0.4 - 12/11/2026 - équipes A, B, C (U12-U13) : écran « Composer les équipes »,
+            équipe affichée sur les matchs, horaire à confirmer
   Historique :
+    0.3.1 - 12/11/2026 - logo du club (connexion, bandeau, icône)
     0.3   - 12/11/2026 - écran « À venir », réponse en un geste, désistement, vue coach
     0.2.1 - 12/11/2026 - premier code possible pour toute adresse connue du club
     0.2   - 11/11/2026 - connexion par code reçu par e-mail
@@ -72,6 +75,20 @@
     .p-autre { background: var(--gris-clair); color: var(--gris); }
     .p-annule { background: var(--rouge-clair); color: var(--rouge); }
     .p-modifie { background: var(--orange-clair); color: var(--orange); }
+    .p-groupe { background: var(--bleu); color: #fff; }
+    .p-sansgroupe { background: var(--gris-clair); color: var(--gris); }
+    .composer { width: 100%; margin: 0 0 10px; border: 1.5px dashed var(--bleu); background: var(--bleu-clair); color: var(--bleu); border-radius: 12px; padding: 11px; font-weight: 600; cursor: pointer; }
+    .compo-match { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--gris-clair); font-size: .88rem; }
+    .compo-match span { flex: 1; }
+    .compo-match select { width: auto; margin: 0; padding: 7px; }
+    .compo-joueur { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--gris-clair); }
+    .compo-joueur .nom { flex: 1; font-size: .92rem; }
+    .compo-joueur .nom small { display: block; color: var(--gris); font-size: .75rem; }
+    .seg { display: flex; gap: 4px; }
+    .seg button { min-width: 36px; border: 1.5px solid #d5dbe7; background: #fff; border-radius: 8px; padding: 7px 0; font-weight: 600; cursor: pointer; color: var(--texte); }
+    .seg button.choisi { background: var(--bleu); border-color: var(--bleu); color: #fff; }
+    .seg button.aucun.choisi { background: var(--gris); border-color: var(--gris); }
+    .compo-resume { position: sticky; top: -20px; background: #fff; padding: 8px 0; z-index: 1; }
     .evt-titre { font-weight: 600; flex: 1; }
     .evt-detail { color: var(--gris); font-size: .88rem; margin-top: 4px; line-height: 1.45; }
     .consignes { background: var(--gris-clair); border-radius: 8px; padding: 8px 10px; font-size: .85rem; margin-top: 8px; white-space: pre-wrap; }
@@ -144,7 +161,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.3.1 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.4 - pilote</p>
     </main>
   </div>
 
@@ -211,6 +228,11 @@
     const heure = (d) => fmtHeure.format(new Date(d)).replace(':', ' h ');
     const LIB_TYPE = { match: 'Match', entrainement: 'Entraînement', tournoi: 'Tournoi', reunion: 'Réunion', autre: 'Événement' };
     const age = (p) => p.annee_naissance ? new Date().getFullYear() - p.annee_naissance : null;
+    const fmtCle = new Intl.DateTimeFormat('en-CA', { timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const cleJour = (d) => fmtCle.format(new Date(d));
+    const sansHeure = (evt) => heure(evt.debut) === '00 h 00' && !evt.fin;
+    const avecGroupes = (equipeId) => { const q = E.equipes.get(equipeId); return q && q.sous_groupes && q.sous_groupes.length ? q.sous_groupes : null; };
+    const estMatch = (evt) => evt.type === 'match' || evt.type === 'tournoi';
 
     function messageErreur(error) {
       const m = (error && error.message || '').toLowerCase();
@@ -284,7 +306,7 @@
       const idsEq = [...new Set([...(mesEq || []), ...(coachEq || [])])];
       E.equipes = new Map();
       if (idsEq.length) {
-        const { data: eqs } = await sb.from('equipes').select('id, nom, categorie, club_id').in('id', idsEq);
+        const { data: eqs } = await sb.from('equipes').select('id, nom, categorie, club_id, sous_groupes').in('id', idsEq);
         for (const q of eqs || []) E.equipes.set(q.id, q);
       }
 
@@ -329,6 +351,8 @@
     function pastilles(evt) {
       const t = evt.type === 'match' || evt.type === 'tournoi' ? 'p-match' : evt.type === 'entrainement' ? 'p-entrainement' : 'p-autre';
       const r = [el('span', { class: 'pastille ' + t }, LIB_TYPE[evt.type] || 'Événement')];
+      if (estMatch(evt) && avecGroupes(evt.equipe_id))
+        r.push(evt.groupe ? el('span', { class: 'pastille p-groupe' }, 'Équipe ' + evt.groupe) : el('span', { class: 'pastille p-sansgroupe' }, 'Équipe à choisir'));
       if (evt.etat === 'annule') r.push(el('span', { class: 'pastille p-annule' }, 'Annulé'));
       else if (evt.etat === 'modifie') r.push(el('span', { class: 'pastille p-modifie' }, 'Modifié'));
       return r;
@@ -341,7 +365,7 @@
     }
     function details(evt) {
       const l = [];
-      let h = heure(evt.debut) + (evt.fin ? ' à ' + heure(evt.fin) : '');
+      let h = sansHeure(evt) ? 'Horaire à confirmer' : heure(evt.debut) + (evt.fin ? ' à ' + heure(evt.fin) : '');
       if (evt.rendez_vous) h += ' (rendez-vous ' + heure(evt.rendez_vous) + ')';
       l.push(h);
       if (evt.lieu || evt.adresse) l.push([evt.lieu, evt.adresse].filter(Boolean).join(', '));
@@ -449,7 +473,16 @@
       let jour = '';
       for (const evt of liste) {
         const j = jourDe(evt.debut);
-        if (j !== jour) { jour = j; zone.append(el('div', { class: 'jour' }, j)); }
+        if (j !== jour) {
+          jour = j; zone.append(el('div', { class: 'jour' }, j));
+          // Un bouton « Composer » par équipe à sous-groupes qui a des matchs ce jour-là
+          const ids = [...new Set(liste.filter(e => jourDe(e.debut) === j && estMatch(e) && e.etat !== 'annule' && avecGroupes(e.equipe_id)).map(e => e.equipe_id))];
+          for (const id of ids) {
+            const q = E.equipes.get(id);
+            zone.append(el('button', { class: 'composer', onclick: () => composer(id, cleJour(evt.debut), j) },
+              'Composer les équipes ' + q.sous_groupes.join(', ') + ' - ' + q.nom));
+          }
+        }
         const c = carteEvenement(evt, false);
         const det = el('details', { class: 'details-liste' }, el('summary', {}, 'Réponses détaillées'));
         det.addEventListener('toggle', async () => { if (det.open && det.children.length === 1) det.append(...await detailCoach(evt)); });
@@ -478,6 +511,71 @@
       const { error } = await sb.from('evenements').update({ etat: 'annule' }).eq('id', evt.id);
       if (error) { toast('Erreur : ' + error.message); return; }
       toast('Événement annulé.'); charger();
+    }
+
+    // ---------- Composition des équipes A, B, C d'une journée ----------
+    function composer(equipeId, jour, libJour) {
+      const q = E.equipes.get(equipeId);
+      ouvrirFenetre('Composer les équipes', async (f) => {
+        f.append(el('p', { class: 'petit' }, q.nom + ' - ' + libJour));
+        const attente = el('p', { class: 'petit' }, 'Chargement...'); f.append(attente);
+        const { data, error } = await sb.rpc('composition_journee', { p_equipe: equipeId, p_jour: jour });
+        attente.remove();
+        if (error) { f.append(el('p', { class: 'erreur' }, 'Erreur : ' + error.message)); return; }
+        const groupes = data.groupes || [];
+        const evts = data.evenements || [];
+        const lib = { present: 'présent', absent: 'absent', incertain: 'incertain', sans_reponse: 'sans réponse' };
+
+        // 1. Équipe de chaque match
+        const selGroupe = new Map();
+        f.append(el('label', {}, 'Matchs du jour'));
+        for (const ev of evts) {
+          const s = el('select', { class: 'champ' }, el('option', { value: '' }, 'Équipe ?'),
+            groupes.map(g => el('option', { value: g, selected: ev.groupe === g }, 'Équipe ' + g)));
+          selGroupe.set(ev.id, s);
+          const h = heure(ev.debut) === '00 h 00' ? '' : heure(ev.debut) + ' - ';
+          f.append(el('div', { class: 'compo-match' },
+            el('span', {}, h + (ev.adversaire ? (ev.domicile === false ? 'chez ' : 'contre ') + ev.adversaire : 'Match') + (ev.titre ? ' (' + ev.titre + ')' : '')), s));
+        }
+
+        // 2. Joueurs : A, B, C ou non retenu
+        const choix = new Map((data.joueurs || []).map(j => [j.id, j.groupe || '']));
+        const resume = el('div', { class: 'compteur compo-resume' });
+        function majResume() {
+          const n = Object.fromEntries(groupes.map(g => [g, 0])); let aucun = 0;
+          for (const v of choix.values()) if (v) n[v]++; else aucun++;
+          resume.replaceChildren(...groupes.map(g => el('span', { class: 'c-present' }, 'Équipe ' + g + ' : ' + n[g])),
+            el('span', { class: 'c-sans' }, 'Non retenus : ' + aucun));
+        }
+        f.append(el('label', { style: 'margin-top:14px' }, 'Joueurs'), resume);
+        for (const j of data.joueurs || []) {
+          const seg = el('div', { class: 'seg' });
+          const boutons = [...groupes, ''].map(g => el('button', { class: (g ? '' : 'aucun') + (choix.get(j.id) === g ? ' choisi' : ''),
+            title: g ? 'Équipe ' + g : 'Non retenu',
+            onclick: () => { choix.set(j.id, g); boutons.forEach(b => b.classList.toggle('choisi', b === boutons[[...groupes, ''].indexOf(g)])); majResume(); } }, g || '-'));
+          seg.append(...boutons);
+          f.append(el('div', { class: 'compo-joueur' },
+            el('div', { class: 'nom' }, j.prenom + ' ' + j.nom, j.groupe ? el('small', {}, 'Réponse : ' + (lib[j.reponse] || '-')) : null), seg));
+        }
+        majResume();
+
+        const enr = el('button', { class: 'btn principal' }, 'Enregistrer et convoquer');
+        f.append(el('p', { class: 'petit' }, 'Les joueurs retenus sont convoqués au match de leur équipe. Un joueur retiré perd sa convocation et sa réponse.'),
+          el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'), enr));
+
+        enr.addEventListener('click', async () => {
+          const pGroupes = {}; for (const [id, s] of selGroupe) pGroupes[id] = s.value;
+          const pAff = {}; for (const [id, g] of choix) if (g) pAff[id] = g;
+          const utilises = new Set(Object.values(pGroupes).filter(Boolean));
+          const orphelins = [...new Set(Object.values(pAff))].filter(g => !utilises.has(g));
+          if (orphelins.length && !confirm('Aucun match ce jour-là pour l\'équipe ' + orphelins.join(', ') + ' : ces joueurs ne seront pas convoqués. Continuer ?')) return;
+          enr.disabled = true;
+          const { data: n, error: e2 } = await sb.rpc('composer_journee', { p_equipe: equipeId, p_jour: jour, p_groupes: pGroupes, p_affectations: pAff });
+          enr.disabled = false;
+          if (e2) { toast('Erreur : ' + e2.message); return; }
+          fermerFenetre(); toast('Composition enregistrée : ' + n + ' convocation' + (n > 1 ? 's' : '') + '.'); charger();
+        });
+      });
     }
 
     // ---------- Fenêtre ----------
@@ -511,6 +609,9 @@
         const blocMatch = el('div', {}, el('label', {}, 'Adversaire'), adv, el('label', {}, 'Lieu du match'), dom);
         const choix = el('div', { class: 'choix-joueurs' });
         const blocSel = el('div', {}, el('label', {}, 'Joueurs convoqués'), choix);
+        const selGrp = el('select', { class: 'champ' });
+        const blocGrp = el('div', {}, el('label', {}, 'Équipe'), selGrp,
+          el('p', { class: 'petit' }, 'Les joueurs sont convoqués ensuite avec « Composer les équipes ».'));
         const note = el('p', { class: 'petit' }, 'Pour un entraînement, toute l\'équipe est convoquée automatiquement.');
 
         async function joueurs() {
@@ -522,17 +623,21 @@
         function maj() {
           const t = selType.value;
           blocMatch.hidden = !(t === 'match' || t === 'tournoi');
-          blocSel.hidden = evt || t === 'entrainement';
+          const grp = avecGroupes(selEq.value);
+          const matchGrp = !!grp && (t === 'match' || t === 'tournoi');
+          blocGrp.hidden = !!evt || !matchGrp;
+          if (matchGrp && !selGrp.children.length) selGrp.replaceChildren(...grp.map(g => el('option', { value: g }, 'Équipe ' + g)));
+          blocSel.hidden = evt || t === 'entrainement' || matchGrp;
           note.hidden = evt || t !== 'entrainement';
           if (!blocSel.hidden && !choix.children.length) joueurs();
         }
-        selType.addEventListener('change', maj); selEq.addEventListener('change', () => { choix.replaceChildren(); maj(); });
+        selType.addEventListener('change', maj); selEq.addEventListener('change', () => { choix.replaceChildren(); selGrp.replaceChildren(); maj(); });
 
         const enr = el('button', { class: 'btn principal' }, evt ? 'Enregistrer' : 'Créer et convoquer');
         f.append(el('label', {}, 'Équipe'), selEq, el('label', {}, 'Type'), selType,
           el('div', { class: 'deux' }, el('div', {}, el('label', {}, 'Début'), debut), el('div', {}, el('label', {}, 'Fin'), fin)),
           el('label', {}, 'Rendez-vous (facultatif)'), rdv, el('label', {}, 'Lieu'), lieu, blocMatch,
-          el('label', {}, 'Consignes (facultatif)'), consignes, blocSel, note,
+          el('label', {}, 'Consignes (facultatif)'), consignes, blocGrp, blocSel, note,
           el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'), enr));
         maj();
 
@@ -550,8 +655,10 @@
             if (error) { toast('Erreur : ' + error.message); return; }
             fermerFenetre(); toast('Événement modifié.'); charger(); return;
           }
-          const { data: cree, error } = await sb.from('evenements').insert({ ...ligne, equipe_id: selEq.value, type: t }).select('id').single();
+          const avecGrp = !blocGrp.hidden;
+          const { data: cree, error } = await sb.from('evenements').insert({ ...ligne, equipe_id: selEq.value, type: t, groupe: avecGrp ? selGrp.value : null }).select('id').single();
           if (error) { enr.disabled = false; toast('Erreur : ' + error.message); return; }
+          if (avecGrp) { enr.disabled = false; fermerFenetre(); toast('Match créé. Composez maintenant l\'équipe ' + selGrp.value + '.'); charger(); return; }
           if (t !== 'entrainement') {
             const ids = [...choix.querySelectorAll('input:checked')].map(i => i.value);
             if (ids.length) {
