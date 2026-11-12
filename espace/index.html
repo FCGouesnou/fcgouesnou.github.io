@@ -6,8 +6,10 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.5.1 - 12/11/2026 - bouton « + Nouvel événement » affiché seulement dans « Mes équipes »
+  Version : 0.6 - 12/11/2026 - lieu choisi par commune puis terrain (référentiel Data ES des terrains
+            de football du Finistère), lien « Itinéraire » sur les événements
   Historique :
+    0.5.1 - 12/11/2026 - bouton « + Nouvel événement » affiché seulement dans « Mes équipes »
     0.5   - 12/11/2026 - application installable (manifeste, service worker, icônes),
             notifications : activation par appareil, test, consignes iPhone ; relance manuelle
             des non-répondants par le coach ; appareil détaché du compte à la sortie
@@ -102,6 +104,7 @@
     .seg button { min-width: 36px; border: 1.5px solid #d5dbe7; background: #fff; border-radius: 8px; padding: 7px 0; font-weight: 600; cursor: pointer; color: var(--texte); }
     .seg button.choisi { background: var(--bleu); border-color: var(--bleu); color: #fff; }
     .seg button.aucun.choisi { background: var(--gris); border-color: var(--gris); }
+    .itineraire { color: var(--bleu); font-weight: 500; text-decoration: none; }
     .compo-resume { position: sticky; top: -20px; background: #fff; padding: 8px 0; z-index: 1; }
     .evt-titre { font-weight: 600; flex: 1; }
     .evt-detail { color: var(--gris); font-size: .88rem; margin-top: 4px; line-height: 1.45; }
@@ -179,7 +182,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.5.1 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.6 - pilote</p>
     </main>
   </div>
 
@@ -200,7 +203,7 @@
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.5.1 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.6 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -338,7 +341,7 @@
       if (idsEq.length) {
         const depuis = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
         const jusqua = new Date(Date.now() + 28 * 86400 * 1000).toISOString();
-        const { data: evts } = await sb.from('evenements').select('*').in('equipe_id', idsEq).gte('debut', depuis).lte('debut', jusqua).order('debut').limit(150);
+        const { data: evts } = await sb.from('evenements').select('*, terrain:terrains(lat, lon)').in('equipe_id', idsEq).gte('debut', depuis).lte('debut', jusqua).order('debut').limit(150);
         // Les sondages SportEasy annulés (« Présence des joueurs ») ne sont pas affichés
         E.evenements = (evts || []).filter(e => !(e.etat === 'annule' && e.type === 'autre' && e.source_uid));
         const idsEvt = E.evenements.map(e => e.id);
@@ -395,6 +398,10 @@
       if (evt.rendez_vous) h += ' (rendez-vous ' + heure(evt.rendez_vous) + ')';
       l.push(h);
       if (evt.lieu || evt.adresse) l.push([evt.lieu, evt.adresse].filter(Boolean).join(', '));
+      const dest = evt.terrain && evt.terrain.lat ? evt.terrain.lat + ',' + evt.terrain.lon : [evt.lieu, evt.adresse].filter(Boolean).join(', ');
+      if (dest && evt.etat !== 'annule')
+        l.push(el('a', { class: 'itineraire', target: '_blank', rel: 'noopener',
+          href: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(dest) }, 'Itinéraire'));
       return l;
     }
     function compteur(evt) {
@@ -627,6 +634,71 @@
       return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); };
     const versIso = (v) => v ? new Date(v).toISOString() : null;
 
+    // ---------- Choix du lieu : commune puis terrain (référentiel Data ES) ----------
+    let communesCache = null;
+    async function listeCommunes() {
+      if (!communesCache) { const { data } = await sb.rpc('communes_terrains'); communesCache = data || []; }
+      return communesCache;
+    }
+    const libelleTerrain = (t) => [t.installation, t.terrain && t.terrain !== t.installation ? t.terrain : null].filter(Boolean).join(' - ')
+      + (t.revetement ? ' (' + t.revetement.toLowerCase() + ')' : '');
+    function choixLieu(evt) {
+      const idListe = 'communes-' + Date.now();
+      const datalist = el('datalist', { id: idListe });
+      const commune = el('input', { class: 'champ', list: idListe, autocomplete: 'off', placeholder: 'Tapez le début du nom, ex. Plouzané' });
+      const selTerrain = el('select', { class: 'champ' });
+      const autre = el('input', { class: 'champ', placeholder: 'Ex. salle omnisports, ou lieu hors Finistère' });
+      const blocTerrain = el('div', { hidden: true }, el('label', {}, 'Terrain'), selTerrain);
+      const blocAutre = el('div', { hidden: true }, el('label', {}, 'Lieu (saisie libre)'), autre);
+      let terrains = [];
+      listeCommunes().then(cs => datalist.replaceChildren(...cs.map(c => el('option', { value: c.commune }))));
+
+      async function chargerTerrains(code) {
+        const nom = commune.value.trim();
+        const c = (await listeCommunes()).find(x => x.commune.toLowerCase() === nom.toLowerCase());
+        if (!c) { terrains = []; selTerrain.replaceChildren(); blocTerrain.hidden = true; blocAutre.hidden = !nom; return; }
+        commune.value = c.commune;
+        const { data } = await sb.from('terrains').select('code, installation, terrain, revetement, adresse, code_postal, commune')
+          .eq('commune', c.commune).eq('actif', true).order('installation').order('terrain');
+        terrains = data || [];
+        selTerrain.replaceChildren(el('option', { value: '' }, 'Choisir un terrain'),
+          ...terrains.map(t => el('option', { value: t.code, selected: t.code === code }, libelleTerrain(t))),
+          el('option', { value: 'autre' }, 'Autre lieu dans cette commune'));
+        if (terrains.length === 1 && !code) selTerrain.value = terrains[0].code;
+        blocTerrain.hidden = false; blocAutre.hidden = selTerrain.value !== 'autre';
+      }
+      commune.addEventListener('change', () => chargerTerrains());
+      selTerrain.addEventListener('change', () => { blocAutre.hidden = selTerrain.value !== 'autre'; if (!blocAutre.hidden) autre.focus(); });
+
+      (async () => {
+        if (evt && evt.terrain_code) {
+          const { data: t } = await sb.from('terrains').select('commune').eq('code', evt.terrain_code).maybeSingle();
+          if (t) { commune.value = t.commune; await chargerTerrains(evt.terrain_code); return; }
+        }
+        if (evt && evt.lieu) { autre.value = evt.lieu; blocAutre.hidden = false; return; }
+        commune.value = 'Gouesnou'; await chargerTerrains();
+      })();
+
+      return {
+        bloc: el('div', {}, el('label', {}, 'Commune'), commune, datalist, blocTerrain, blocAutre),
+        // À domicile : Gouesnou par défaut ; à l'extérieur : commune vidée pour être saisie
+        sens(domicile) {
+          const nom = commune.value.trim().toLowerCase();
+          if (!domicile && nom === 'gouesnou') { commune.value = ''; chargerTerrains(); commune.focus(); }
+          if (domicile && !nom) { commune.value = 'Gouesnou'; chargerTerrains(); }
+        },
+        valeur() {
+          const t = terrains.find(x => x.code === selTerrain.value);
+          if (t) return { terrain_code: t.code, lieu: [t.installation, t.terrain && t.terrain !== t.installation ? t.terrain : null].filter(Boolean).join(' - '),
+            adresse: [t.adresse, [t.code_postal, t.commune].filter(Boolean).join(' ')].filter(Boolean).join(', ') };
+          const libre = autre.value.trim();
+          const com = commune.value.trim();
+          if (evt && libre && libre === evt.lieu && !evt.terrain_code) return { terrain_code: null, lieu: evt.lieu, adresse: evt.adresse || null };
+          return { terrain_code: null, lieu: libre ? libre + (com && !libre.toLowerCase().includes(com.toLowerCase()) ? ', ' + com : '') : (com || null), adresse: null };
+        }
+      };
+    }
+
     async function formulaireEvenement(evt) {
       const equipes = [...E.equipes.values()].filter(q => E.coachees.has(q.id));
       ouvrirFenetre(evt ? 'Modifier l\'événement' : 'Nouvel événement', async (f) => {
@@ -637,7 +709,7 @@
         const debut = el('input', { class: 'champ', type: 'datetime-local', value: evt ? versLocal(evt.debut) : '', required: true });
         const fin = el('input', { class: 'champ', type: 'datetime-local', value: evt ? versLocal(evt.fin) : '' });
         const rdv = el('input', { class: 'champ', type: 'datetime-local', value: evt ? versLocal(evt.rendez_vous) : '' });
-        const lieu = el('input', { class: 'champ', placeholder: 'Ex. Stade de Kerloquin', value: evt ? evt.lieu || '' : '' });
+        const lieu = choixLieu(evt);
         const adv = el('input', { class: 'champ', placeholder: 'Ex. AS Brestoise', value: evt ? evt.adversaire || '' : '' });
         const dom = el('select', { class: 'champ' }, el('option', { value: 'true', selected: !evt || evt.domicile !== false }, 'À domicile'), el('option', { value: 'false', selected: evt && evt.domicile === false }, 'À l\'extérieur'));
         const consignes = el('textarea', { class: 'champ', rows: 3, placeholder: 'Ex. prévoir les deux maillots' }); consignes.value = evt ? evt.consignes || '' : '';
@@ -666,12 +738,13 @@
           note.hidden = evt || t !== 'entrainement';
           if (!blocSel.hidden && !choix.children.length) joueurs();
         }
+        dom.addEventListener('change', () => lieu.sens(dom.value === 'true'));
         selType.addEventListener('change', maj); selEq.addEventListener('change', () => { choix.replaceChildren(); selGrp.replaceChildren(); maj(); });
 
         const enr = el('button', { class: 'btn principal' }, evt ? 'Enregistrer' : 'Créer et convoquer');
         f.append(el('label', {}, 'Équipe'), selEq, el('label', {}, 'Type'), selType,
           el('div', { class: 'deux' }, el('div', {}, el('label', {}, 'Début'), debut), el('div', {}, el('label', {}, 'Fin'), fin)),
-          el('label', {}, 'Rendez-vous (facultatif)'), rdv, el('label', {}, 'Lieu'), lieu, blocMatch,
+          el('label', {}, 'Rendez-vous (facultatif)'), rdv, blocMatch, lieu.bloc,
           el('label', {}, 'Consignes (facultatif)'), consignes, blocGrp, blocSel, note,
           el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'), enr));
         maj();
@@ -680,7 +753,7 @@
           if (!debut.value) { toast('Indiquez la date et l\'heure de début.'); return; }
           const t = selType.value;
           const ligne = { debut: versIso(debut.value), fin: versIso(fin.value), rendez_vous: versIso(rdv.value),
-            lieu: lieu.value.trim() || null, consignes: consignes.value.trim() || null,
+            ...lieu.valeur(), consignes: consignes.value.trim() || null,
             adversaire: (t === 'match' || t === 'tournoi') ? adv.value.trim() || null : null,
             domicile: (t === 'match' || t === 'tournoi') ? dom.value === 'true' : null };
           enr.disabled = true;
