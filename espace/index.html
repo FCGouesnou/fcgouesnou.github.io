@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.8.3 - 13/11/2026 - Partenaires 1.3 : rôle « finances » pour le comptable
+  Version : 0.9 - 13/11/2026 - « Voir en tant que » (administrateurs) : aperçu en lecture seule de l'application
+           telle qu'une personne la voit, avec sa fiche droits ; chaque aperçu est noté dans le journal
+           0.8.3 - 13/11/2026 - Partenaires 1.3 : rôle « finances » pour le comptable
            0.8.2 - 12/11/2026 - Partenaires 1.2 : relier ou écarter les écritures du contrôle compta
            0.8.1 - 12/11/2026 - carte des notifications affichée une seule fois
            0.8 - 12/11/2026 - Partenaires 1.1 : tableau de bord, documents avec les contrats, casse à l'enregistrement
@@ -112,6 +114,11 @@
     .seg button.aucun.choisi { background: var(--gris); border-color: var(--gris); }
     /* Partenaires */
     .fenetre.large { max-width: 860px; }
+    .bandeau-apercu { background: #fff4e0; border: 2px solid #e8a33a; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: .88rem; }
+    .bandeau-apercu .ligne-titre { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    .bandeau-apercu strong { color: #8a4b00; }
+    .bandeau-apercu ul { margin: 8px 0 0; padding-left: 18px; color: var(--texte); }
+    .liste-apercu { display: grid; gap: 6px; margin-top: 10px; max-height: 50vh; overflow: auto; }
     .p-tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 14px; }
     .p-tuile { background: #fff; border: 0; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); text-align: left; color: var(--texte); font: inherit; }
     .p-tuile.p-cliquable { cursor: pointer; }
@@ -236,7 +243,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.8.3 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.9 - pilote</p>
     </main>
   </div>
 
@@ -245,10 +252,12 @@
     <header class="entete">
       <img class="logo-entete" src="../images/logo-fcg.png" alt="">
       <h2>Espace club</h2>
+      <button id="btnApercu" title="Voir l'application comme une autre personne" hidden>Voir en tant que</button>
       <button id="btnActualiser" title="Actualiser">Actualiser</button>
       <button id="btnSortir">Sortir</button>
     </header>
     <div class="contenu">
+      <div id="bandeauApercu" class="bandeau-apercu" hidden></div>
       <p class="bonjour" id="bonjour"></p>
       <div id="carteNotif" class="carte-notif" hidden></div>
       <div class="onglets" id="onglets" hidden>
@@ -259,7 +268,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.8.3 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.9 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -278,9 +287,43 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
 
-    const sb = createClient(SUPABASE_URL, SUPABASE_CLE, {
+    const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
     });
+
+    // ---------- Aperçu « Voir en tant que » (lecture seule) ----------
+    // Pendant un aperçu, toute écriture est refusée côté écran et les fonctions qui dépendent
+    // de la personne connectée renvoient les valeurs calculées pour la personne observée.
+    const AP = { actif: null, suisAdmin: false };
+    const RPC_LECTURE = new Set(['convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord']);
+    const MSG_APERCU = 'Aperçu en lecture seule : aucune modification n\'est enregistrée.';
+    function refus() {
+      const r = { data: null, error: { message: MSG_APERCU } };
+      const f = new Proxy(function () {}, {
+        get: (t, k) => k === 'then' ? (a, b) => Promise.resolve(r).then(a, b) : () => f,
+        apply: () => f });
+      return f;
+    }
+    const sb = new Proxy(sbReel, { get(t, k) {
+      if (k === 'from') return (table) => {
+        const q = t.from(table);
+        if (!AP.actif) return q;
+        return new Proxy(q, { get(q2, m) {
+          if (['insert', 'update', 'upsert', 'delete'].includes(m)) return () => refus();
+          const v = q2[m]; return typeof v === 'function' ? v.bind(q2) : v; } });
+      };
+      if (k === 'rpc') return (nom, args) => {
+        if (AP.actif) {
+          const ok = (data) => Promise.resolve({ data, error: null });
+          if (nom === 'mes_roles') return ok(AP.actif.roles);
+          if (nom === 'mes_equipes') return ok(AP.actif.mes_equipes);
+          if (nom === 'equipes_coachees') return ok(AP.actif.equipes_coachees);
+          if (!RPC_LECTURE.has(nom)) return refus();
+        }
+        return t.rpc(nom, args);
+      };
+      const v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+    } });
 
     const $ = (id) => document.getElementById(id);
     const el = (tag, attrs = {}, ...enfants) => {
@@ -362,7 +405,7 @@
     });
     $('btnRetour').addEventListener('click', () => { emailEnCours = ''; erreurConnexion(''); $('saisieCode').hidden = true; $('choixConnexion').hidden = false; });
     $('btnSortir').addEventListener('click', async () => {
-      try { const sub = await abonnementActuel(); if (sub) await sb.from('appareils').delete().eq('endpoint', sub.endpoint); } catch (e) {}
+      try { const sub = await abonnementActuel(); if (sub) await sbReel.from('appareils').delete().eq('endpoint', sub.endpoint); } catch (e) {}
       await sb.auth.signOut();
     });
     $('btnActualiser').addEventListener('click', () => charger());
@@ -370,13 +413,20 @@
     // ---------- Chargement des données ----------
     async function charger() {
       const uid = session.user.id;
-      const { data: fiches, error: e1 } = await sb.from('personnes').select('id, prenom, nom, annee_naissance, club_id').eq('user_id', uid);
-      if (e1) { toast('Erreur de chargement : ' + e1.message); return; }
+      let fiches = null;
+      if (AP.actif) fiches = AP.actif.fiches;
+      else {
+        const { data, error: e1 } = await sb.from('personnes').select('id, prenom, nom, annee_naissance, club_id').eq('user_id', uid);
+        if (e1) { toast('Erreur de chargement : ' + e1.message); return; }
+        fiches = data;
+      }
       E.fiches = fiches || [];
       E.personnes = new Map(E.fiches.map(p => [p.id, { ...p, moi: true }]));
       E.repondPour = new Set(E.fiches.filter(p => age(p) === null || age(p) >= 18).map(p => p.id));
 
-      if (E.fiches.length) {
+      if (AP.actif) {
+        for (const x of AP.actif.enfants) { E.personnes.set(x.id, { ...x, enfant: true }); E.repondPour.add(x.id); }
+      } else if (E.fiches.length) {
         const ids = E.fiches.map(p => p.id);
         const { data: enfants } = await sb.from('liens_famille')
           .select('enfant_id, enfant:personnes!liens_famille_enfant_id_fkey(id, prenom, nom, annee_naissance, club_id)')
@@ -409,7 +459,15 @@
         }
         await Promise.all(idsEvt.map(async (id) => {
           const { data } = await sb.rpc('convocations_evenement', { ev: id });
-          E.resumes.set(id, data || []);
+          let lignes = data || [];
+          // En aperçu, la personne observée ne voit les réponses que si elle coache l'équipe, est au CODIR
+          // ou si le club laisse les familles voir les réponses
+          if (AP.actif) {
+            const evt = E.evenements.find(x => x.id === id);
+            const voit = AP.actif.familles_voient_reponses || E.coachees.has(evt && evt.equipe_id) || AP.actif.roles.some(r => r.role === 'codir');
+            if (!voit) lignes = lignes.map(l => ({ ...l, reponse: null }));
+          }
+          E.resumes.set(id, lignes);
         }));
       }
       afficher();
@@ -897,6 +955,7 @@
       const c = $('carteNotif');
       const pret = () => { if (n !== majNotifN) return false; c.replaceChildren(); c.className = 'carte-notif'; c.hidden = false; return true; };
       if (!pret()) return;
+      if (AP.actif) { c.hidden = true; return; }
       const texte = (t, petit) => el('div', { class: 'texte' }, t, petit ? el('small', {}, petit) : null);
       if (estIOS && !estInstallee) {
         c.append(texte('Installez l\'application sur votre iPhone pour recevoir les notifications.',
@@ -937,12 +996,92 @@
       } }, 'Installer l\'application');
     }
 
+
+    // ---------- Voir en tant que (administrateurs) ----------
+    function revenirAvenir() {
+      vue = 'avenir';
+      document.querySelectorAll('#onglets .onglet').forEach(x => x.classList.toggle('actif', x.dataset.vue === 'avenir'));
+    }
+    async function relancerVue() {
+      P = null; partenairesOk = false;
+      revenirAvenir();
+      await charger(); majCarteNotif(); await preparerPartenaires();
+    }
+    function ficheDroits(a) {
+      const roles = a.roles.map(r => r.role);
+      const part = roles.includes('admin') || roles.includes('partenaires') ? 'modification'
+        : roles.includes('finances') ? 'consultation et volet comptable'
+        : roles.includes('codir') ? 'consultation' : 'pas d\'accès';
+      const libRole = { coach: 'coach', dirigeant: 'dirigeant', joueur: 'joueur' };
+      const equipes = a.membres.map(m => (m.prenom === a.personne.prenom ? '' : m.prenom + ' : ') + (libRole[m.role] || m.role) + ' ' + m.equipe);
+      return [
+        'Équipes : ' + (equipes.length ? equipes.join(' ; ') : 'aucune'),
+        'Administrateur : ' + (roles.includes('admin') ? 'oui' : 'non') + ' · CODIR : ' + (roles.includes('codir') ? 'oui' : 'non'),
+        'Partenaires : ' + part,
+        'Connexion : ' + (a.personne.connecte ? 'compte déjà utilisé' : 'jamais connecté') + ' · e-mail : ' + (a.personne.email || 'aucun')
+          + ' · notifications : ' + (a.appareils ? a.appareils + ' appareil(s)' : 'aucun appareil'),
+      ];
+    }
+    function dessinerBandeau() {
+      const b = $('bandeauApercu'); b.replaceChildren();
+      if (!AP.actif) { b.hidden = true; return; }
+      const a = AP.actif;
+      b.append(el('div', { class: 'ligne-titre' },
+          el('strong', {}, 'Aperçu : ' + a.personne.prenom + ' ' + a.personne.nom + ' - lecture seule'),
+          el('button', { class: 'mini', onclick: arreterApercu }, 'Revenir à moi')),
+        el('ul', {}, ficheDroits(a).map(t => el('li', {}, t))));
+      b.hidden = false;
+    }
+    async function demarrerApercu(personneId) {
+      const { data, error } = await sbReel.rpc('apercu_profil', { p_personne: personneId });
+      if (error) { toast('Erreur : ' + error.message); return; }
+      fermerFenetre();
+      AP.actif = data; dessinerBandeau();
+      window.scrollTo(0, 0);
+      await relancerVue();
+    }
+    async function arreterApercu() {
+      AP.actif = null; dessinerBandeau();
+      await relancerVue();
+    }
+    function choisirApercu() {
+      ouvrirFenetre('Voir en tant que', (f) => {
+        const q = el('input', { class: 'champ', placeholder: 'Nom ou prénom (au moins 2 lettres)' });
+        const liste = el('div', { class: 'liste-apercu' });
+        let minuteur = null;
+        q.addEventListener('input', () => {
+          clearTimeout(minuteur);
+          minuteur = setTimeout(async () => {
+            const t = q.value.trim();
+            if (t.length < 2) { liste.replaceChildren(); return; }
+            const motif = '%' + t.replace(/[%_,()]/g, ' ') + '%';
+            const { data } = await sbReel.from('personnes').select('id, prenom, nom, email, est_codir, user_id')
+              .or('nom.ilike.' + motif + ',prenom.ilike.' + motif).order('nom').limit(25);
+            liste.replaceChildren(...((data || []).length ? data.map(p => el('button', { class: 'p-ligne', onclick: () => demarrerApercu(p.id) },
+              el('div', { class: 'p-ligne-nom' }, p.prenom + ' ' + p.nom,
+                el('small', {}, [p.est_codir ? 'CODIR' : null, p.user_id ? 'déjà connecté' : 'jamais connecté', p.email ? 'avec e-mail' : 'sans e-mail'].filter(Boolean).join(' · ')))))
+              : [el('p', { class: 'vide' }, 'Personne trouvée.')]));
+          }, 250);
+        });
+        f.append(el('p', { class: 'petit' }, 'L\'application s\'affiche comme pour cette personne, en lecture seule : aucun bouton n\'enregistre rien. L\'aperçu est noté dans le journal.'),
+          q, liste, el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+        setTimeout(() => q.focus(), 50);
+      });
+    }
+    $('btnApercu').addEventListener('click', choisirApercu);
+    async function verifierAdmin() {
+      const { data } = await sbReel.rpc('mes_roles');
+      AP.suisAdmin = (data || []).some(r => r.role === 'admin');
+      $('btnApercu').hidden = !AP.suisAdmin;
+    }
+
     // ---------- Session ----------
     function basculer(s) {
       session = s;
       $('ecranConnexion').hidden = !!s;
       $('ecranAppli').hidden = !s;
-      if (s) setTimeout(() => { charger(); majCarteNotif(); preparerPartenaires(); }, 0);
+      if (!s) { AP.actif = null; AP.suisAdmin = false; dessinerBandeau(); $('btnApercu').hidden = true; }
+      if (s) setTimeout(() => { charger(); majCarteNotif(); preparerPartenaires(); verifierAdmin(); }, 0);
     }
     sb.auth.onAuthStateChange((evenement, s) => {
       if (s && (location.search || location.hash)) history.replaceState(null, '', ADRESSE_APPLI);
