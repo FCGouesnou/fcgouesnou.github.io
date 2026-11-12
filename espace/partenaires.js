@@ -5,15 +5,62 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.0 - 12/11/2026 - première version (reprise du module Partenaires de l'Espace club Apps Script)
+  Version : 1.1 - 12/11/2026 - tableau de bord (indicateurs, évolution, paiements attendus, renouvellements,
+            actions, fins de contrat, contrôle compta) ; documents du Drive visibles avec les contrats ;
+            casse normalisée à l'enregistrement (adresse, ville, nom, prénom, fonction).
+            1.0 - 12/11/2026 - première version (reprise du module Partenaires de l'Espace club Apps Script)
 */
+
+// ---------- Casse (même règle que la base et l'import des terrains) ----------
+const VOIES = new Set(['rue','avenue','av','boulevard','bd','place','route','impasse','allée','allee','chemin','quai','square','cours','voie','sentier','venelle','passage','rond-point','esplanade']);
+const SIGLES = new Set(['ZA','ZI','ZAC','ZAE','ZAD','BP','CS','CEDEX','RN','RD','SAS','SARL','EURL','SA','SCI','SNC','EARL','TP','II','III','IV']);
+const PETITS = new Set(['ar','an','ann','de','du','des','d','l','et','à','au','aux','sur','sous','en']);
+const maj1 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+export function casseAdresse(a) {
+  let s = String(a ?? '').replace(/\s+/g, ' ').trim().replace(/\u2019/g, "'");
+  if (!s) return null;
+  s = s.replace(/([cC])'([hH])/g, (_, c, h) => c + '\u02bc' + h.toLowerCase());
+  s = s.replace(/\b([DdLl]) (?=[A-Za-zÀ-ÿ])/g, "$1'");
+  s = s.replace(/\b[Rr][Tt][Ee]\b\.?/g, 'route');
+  let debut = true, voie = false;
+  s = s.split(/(\s+|')/).map((p) => {
+    if (!p || /^\s+$/.test(p) || p === "'") return p;
+    let w; const b = p.toLowerCase();
+    if (SIGLES.has(p.toUpperCase())) w = p.toUpperCase();
+    else if (/^\d/.test(p)) w = /^\d+(bis|ter|quater|[a-z])$/i.test(p) ? b : p;
+    else if (VOIES.has(b) && !voie) w = b;
+    else if (PETITS.has(b) && !debut) w = b;
+    else w = b.split('-').map(maj1).join('-');
+    if (VOIES.has(b) && !voie) voie = true;
+    if (!/^\d/.test(p)) debut = false;
+    return w;
+  }).join('');
+  s = s.replace(/(\d) (Bis|Ter)\b/g, (_, d, x) => d + ' ' + x.toLowerCase());
+  s = s.replace(/\b(de|De) (Le|La|Les)\b/g, (_, d, x) => d + ' ' + x.toLowerCase());
+  s = s.replace(/\b([dl])'([a-zà-ÿ])/g, (_, d, x) => d + "'" + x.toUpperCase());
+  s = s.replace(/\u02bc/g, "'");
+  return /^(rue|avenue|route|place|impasse|allée|chemin|boulevard|quai|square|venelle|passage)\b/.test(s) ? s : maj1(s);
+}
+// Nom, prénom, ville : « LE CORRE » -> « Le Corre », « jean-michel » -> « Jean-Michel » ; de, du, des, d' en minuscules au milieu
+export function casseNom(t) {
+  const s = String(t ?? '').replace(/\s+/g, ' ').trim().replace(/\u2019/g, "'");
+  if (!s) return null;
+  let debut = true;
+  return s.split(/(\s+|-|')/).map((p) => {
+    if (!p || /^\s+$/.test(p) || p === '-' || p === "'") return p;
+    const b = p.toLowerCase();
+    const w = (!debut && ['de', 'du', 'des', 'd', 'ar', 'an'].includes(b)) ? b : maj1(b);
+    debut = false; return w;
+  }).join('');
+}
+const casseDebut = (t) => { const s = String(t ?? '').trim(); return s ? maj1(s) : null; };
 
 export function initPartenaires(ctx) {
   const { sb, el, toast } = ctx;
   const euros = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
   const eur = (v) => v === null || v === undefined || v === '' ? '-' : euros.format(Number(v));
   const dateFr = (iso) => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
-  const S = { peutModifier: false, clubId: null, saison: null, entreprises: [], listes: {}, modeles: [], filtre: '', statut: 'actifs', zone: null };
+  const S = { peutModifier: false, clubId: null, saison: null, entreprises: [], listes: {}, modeles: [], filtre: '', statut: 'actifs', zone: null, vue: 'tableau' };
 
   // ---------- Fenêtre large ----------
   function fenetre(titre, remplir) {
@@ -65,10 +112,19 @@ export function initPartenaires(ctx) {
     zone.replaceChildren(el('p', { class: 'petit' }, 'Chargement des partenaires...'));
     if (!Object.keys(S.listes).length) await chargerReferentiels();
     await chargerListe();
-    dessinerListe();
+    dessiner();
   }
-  function dessinerListe() {
+  // Deux vues : tableau de bord (par défaut) et liste des entreprises
+  function dessiner() {
     const zone = S.zone; zone.replaceChildren();
+    const nav = el('div', { class: 'p-onglets' });
+    const corps = el('div', {});
+    [['tableau', 'Tableau de bord'], ['liste', 'Entreprises']].forEach(([v, t]) => nav.append(el('button', {
+      class: 'onglet' + (S.vue === v ? ' actif' : ''), onclick: () => { S.vue = v; dessiner(); } }, t)));
+    zone.append(nav, corps);
+    if (S.vue === 'tableau') dessinerTableau(corps); else dessinerListe(corps);
+  }
+  function dessinerListe(zone) {
     const actifs = S.entreprises.filter(e => /actif/i.test(e.statut || ''));
     const att = actifs.reduce((s, e) => s + Number(e.attendu || 0), 0) + S.entreprises.filter(e => !/actif/i.test(e.statut || '')).reduce((s, e) => s + Number(e.attendu || 0), 0);
     const rec = S.entreprises.reduce((s, e) => s + Number(e.recu || 0), 0);
@@ -109,13 +165,75 @@ export function initPartenaires(ctx) {
     remplir();
   }
 
+  // ---------- Tableau de bord ----------
+  async function dessinerTableau(zone) {
+    zone.replaceChildren(el('p', { class: 'petit' }, 'Calcul du tableau de bord...'));
+    const { data: t, error } = await sb.rpc('part_tableau_bord');
+    if (error || !t) { zone.replaceChildren(el('p', { class: 'vide' }, 'Tableau de bord indisponible : ' + (error ? error.message : 'aucune donnée'))); return; }
+    const i = t.indicateurs;
+    const taux = i.attendu ? Math.round(100 * i.recu / i.attendu) : 0;
+    const ecart = i.recu_an_passe_meme_date ? Math.round(100 * (i.recu - i.recu_an_passe_meme_date) / i.recu_an_passe_meme_date) : null;
+    const tuile = (valeur, libelle, detail, cible) => el(cible ? 'button' : 'div', { class: 'p-tuile' + (cible ? ' p-cliquable' : ''),
+      onclick: cible ? () => document.getElementById('tb-' + cible)?.scrollIntoView({ behavior: 'smooth' }) : null },
+      el('strong', {}, valeur), el('span', {}, libelle), detail ? el('small', {}, detail) : null);
+    zone.replaceChildren();
+    zone.append(el('p', { class: 'petit' }, 'Saison ' + t.saison + ' · situation au ' + new Date().toLocaleDateString('fr-FR')));
+    zone.append(el('div', { class: 'p-tuiles' },
+      el('div', { class: 'p-tuile p-tuile-large' },
+        el('strong', {}, eur(i.recu)), el('span', {}, 'encaissés sur ' + eur(i.attendu) + ' attendus'),
+        el('div', { class: 'p-jauge' }, el('div', { style: 'width:' + Math.min(100, taux) + '%' })),
+        el('small', {}, taux + ' % · ' + i.entreprises_saison + ' entreprises' +
+          (ecart !== null ? ' · ' + (ecart >= 0 ? '+' : '') + ecart + ' % par rapport à la même date en ' + t.saison_precedente + ' (' + eur(i.recu_an_passe_meme_date) + ')' : ''))),
+      tuile(eur(Math.max(0, i.attendu - i.recu)), 'reste à encaisser', t.paiements_attendus.length + ' échéances', 'paiements'),
+      tuile(String(i.a_renouveler), 'à renouveler', eur(i.a_renouveler_montant) + ' en ' + t.saison_precedente, 'renouvellements'),
+      tuile(String(i.actions_a_faire), 'actions à faire', i.actions_en_retard ? i.actions_en_retard + ' en retard' : 'aucune en retard', 'actions'),
+      tuile(String(i.actifs), 'partenaires actifs', null, null),
+      tuile(String(i.a_verifier), 'points à vérifier', 'contrats, échéances, paiements', null),
+      tuile(String(i.compta_sans_paiement), 'écritures compta', 'sans paiement relié', 'compta')));
+
+    // Évolution par saison : barres attendu / encaissé
+    const evo = t.evolution || [];
+    const max = Math.max(1, ...evo.map(x => Math.max(Number(x.attendu), Number(x.recu))));
+    zone.append(el('h4', { class: 'p-titre' }, 'Évolution par saison'),
+      el('div', { class: 'p-evo' }, evo.map(x => el('div', { class: 'p-evo-col', title: x.saison + ' : ' + eur(x.recu) + ' encaissés sur ' + eur(x.attendu) + ' (' + x.entreprises + ' entreprises)' },
+        el('div', { class: 'p-evo-barres' },
+          el('div', { class: 'p-evo-att', style: 'height:' + (100 * x.attendu / max) + '%' }),
+          el('div', { class: 'p-evo-rec', style: 'height:' + (100 * x.recu / max) + '%' })),
+        el('small', {}, Math.round(x.recu / 100) / 10 + ' k€'),
+        el('span', {}, x.saison.slice(2, 4) + '-' + x.saison.slice(7))))),
+      el('p', { class: 'petit' }, el('span', { class: 'p-leg p-evo-att' }), ' attendu  ', el('span', { class: 'p-leg p-evo-rec' }), ' encaissé'));
+
+    // Listes de travail
+    const bloc = (id, titre, lignes, ouvert, rendu) => el('details', { class: 'details-liste p-bloc-tb', id: 'tb-' + id, open: ouvert },
+      el('summary', {}, titre + ' (' + lignes.length + ')'),
+      lignes.length ? lignes.map(x => el('button', { class: 'p-ligne', onclick: () => x.entreprise_id && ouvrirFiche(x.entreprise_id) }, ...rendu(x)))
+                    : [el('p', { class: 'vide' }, 'Rien à signaler.')]);
+    const retard = (d) => d && d < new Date().toISOString().slice(0, 10);
+    zone.append(
+      bloc('actions', 'Actions à faire', t.actions, true, (x) => [
+        el('div', { class: 'p-ligne-nom' }, x.nom || '-', el('small', {}, [x.type, x.objet, x.responsable].filter(Boolean).join(' · '))),
+        el('span', { class: 'pastille ' + (retard(x.date_prevue) ? 'p-annule' : 'p-autre') }, x.date_prevue ? dateFr(x.date_prevue) : 'sans date')]),
+      bloc('paiements', 'Paiements attendus en ' + t.saison, t.paiements_attendus, true, (x) => [
+        el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.contrat, x.objet].filter(Boolean).join(' · '))),
+        el('span', { class: 'pastille ' + (Number(x.recu) > 0 ? 'p-match' : 'p-annule') }, eur(x.recu) + ' / ' + eur(x.attendu))]),
+      bloc('renouvellements', 'À renouveler (partenaires ' + t.saison_precedente + ' sans contrat en ' + t.saison + ')', t.renouvellements, false, (x) => [
+        el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.statut, x.prochaine_action ? 'action prévue le ' + dateFr(x.prochaine_action) : 'aucune action prévue'].filter(Boolean).join(' · '))),
+        el('span', { class: 'petit' }, eur(x.montant))]),
+      bloc('fins', 'Contrats qui se terminent cette saison', t.fins_de_contrat, false, (x) => [
+        el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.contrat, x.formule, x.tacite ? 'reconduction tacite' : null].filter(Boolean).join(' · '))),
+        el('span', { class: 'petit' }, eur(x.montant) + ' · fin ' + dateFr(x.date_fin))]),
+      bloc('compta', 'Contrôle compta : écritures sans paiement relié', t.compta, false, (x) => [
+        el('div', { class: 'p-ligne-nom' }, x.nom || 'Entreprise non identifiée', el('small', {}, [dateFr(x.date), x.numero, x.libelle].filter(Boolean).join(' · '))),
+        el('span', { class: 'petit' }, eur(x.montant))]));
+  }
+
   async function nouvelleEntreprise() {
     const nom = prompt('Nom de la nouvelle entreprise :'); if (!nom || !nom.trim()) return;
     const { data: refs } = await sb.from('part_entreprises').select('ref').like('ref', 'P%');
     const n = Math.max(0, ...(refs || []).map(r => parseInt(r.ref.slice(1), 10) || 0)) + 1;
     const { data, error } = await sb.from('part_entreprises').insert({ club_id: S.clubId, ref: 'P' + String(n).padStart(3, '0'), nom: nom.trim(), statut: 'Prospect' }).select('id').single();
     if (error) { toast('Erreur : ' + error.message); return; }
-    await chargerListe(); dessinerListe(); ouvrirFiche(data.id);
+    await chargerListe(); S.vue = 'liste'; dessiner(); ouvrirFiche(data.id);
   }
 
   // ---------- Fiche ----------
@@ -132,10 +250,10 @@ export function initPartenaires(ctx) {
     fenetre(e.nom, (f) => {
       const onglets = el('div', { class: 'p-onglets' });
       const corps = el('div', {});
-      const sections = [['Contrats et paiements', () => sectionContrats(e, contrats || [], ecritures || [])],
+      const sections = [['Contrats et paiements', () => sectionContrats(e, contrats || [], ecritures || [], docs || [])],
                         ['Coordonnées', () => sectionCoordonnees(e, contacts || [])],
                         ['Historique', () => sectionHistorique(e, actions || [], contacts || [])],
-                        ['Documents', () => sectionDocuments(docs || [])]];
+                        ['Documents (' + (docs || []).length + ')', () => sectionDocuments(docs || [])]];
       sections.forEach(([t, fn], i) => onglets.append(el('button', { class: 'onglet' + (i === 0 ? ' actif' : ''), onclick: (ev) => {
         onglets.querySelectorAll('.onglet').forEach(b => b.classList.toggle('actif', b === ev.currentTarget));
         corps.replaceChildren(fn());
@@ -149,11 +267,17 @@ export function initPartenaires(ctx) {
       corps.append(sections[0][1]());
     });
   }
-  async function rafraichir(id) { await chargerListe(); if (S.zone) dessinerListe(); ouvrirFiche(id); }
+  async function rafraichir(id) { await chargerListe(); if (S.zone) dessiner(); ouvrirFiche(id); }
 
   // Contrats, échéances et paiements
-  function sectionContrats(e, contrats, ecritures) {
+  const lienDrive = (d) => 'https://drive.google.com/file/d/' + d.drive_id + '/view';
+  function sectionContrats(e, contrats, ecritures, docs) {
     const z = el('div', {});
+    // Contrats, conventions et reçus signés : accès direct au Drive
+    const signes = docs.filter(d => /contrat|convention|reçu|recu|attestation/i.test(d.type || ''));
+    if (signes.length) z.append(el('div', { class: 'p-docs' }, el('span', { class: 'petit' }, 'Documents signés : '),
+      signes.map(d => el('a', { class: 'mini', href: lienDrive(d), target: '_blank', rel: 'noopener', title: d.nom_fichier },
+        (d.type || 'Document') + (d.date_document ? ' ' + dateFr(d.date_document) : '')))));
     if (S.peutModifier) z.append(el('button', { class: 'mini', onclick: () => formContrat(e, null) }, '+ Contrat'));
     if (!contrats.length) z.append(el('p', { class: 'vide' }, 'Aucun contrat.'));
     for (const c of contrats) {
@@ -163,6 +287,7 @@ export function initPartenaires(ctx) {
           el('strong', {}, c.ref + ' - ' + (c.formule || 'sans formule')),
           el('span', { class: 'petit' }, [c.montant_annuel ? eur(c.montant_annuel) + ' par saison' : 'montant non renseigné',
             c.saison_debut + (c.duree_saisons > 1 ? ', ' + c.duree_saisons + ' saisons' : ''), c.statut, c.nature].filter(Boolean).join(' · ')),
+          c.lien_document ? el('a', { class: 'mini', href: c.lien_document, target: '_blank', rel: 'noopener' }, 'Contrat') : null,
           S.peutModifier ? el('button', { class: 'mini', onclick: () => formContrat(e, c) }, 'Modifier') : null),
         c.detail ? el('p', { class: 'petit' }, c.detail) : null,
         marque(c.a_verifier),
@@ -304,6 +429,7 @@ export function initPartenaires(ctx) {
     if (!ro) z.append(el('button', { class: 'btn principal', onclick: async (ev) => {
       const ligne = {}; for (const [k, i] of Object.entries(f)) ligne[k] = vide(i.value);
       if (!ligne.nom) { toast('Le nom est obligatoire.'); return; }
+      ligne.adresse = casseAdresse(ligne.adresse); ligne.ville = casseNom(ligne.ville);
       ev.currentTarget.disabled = true;
       const { error } = await sb.from('part_entreprises').update(ligne).eq('id', e.id);
       if (error) { toast('Erreur : ' + error.message); ev.currentTarget.disabled = false; return; }
@@ -341,6 +467,7 @@ export function initPartenaires(ctx) {
           el('button', { class: 'btn secondaire', onclick: () => ouvrirFiche(e.id) }, 'Retour'), enr));
       enr.addEventListener('click', async () => {
         const ligne = {}; for (const [k, x] of Object.entries(i)) ligne[k] = vide(x.value);
+        ligne.prenom = casseNom(ligne.prenom); ligne.nom = casseNom(ligne.nom); ligne.fonction = casseDebut(ligne.fonction);
         ligne.principal = principal.checked;
         if (!ligne.nom && !ligne.prenom) { toast('Indiquez au moins un nom.'); return; }
         if (ligne.principal) await sb.from('part_contacts').update({ principal: false }).eq('entreprise_id', e.id);
@@ -399,7 +526,7 @@ export function initPartenaires(ctx) {
     for (const d of docs) z.append(el('div', { class: 'p-paiement' },
       el('span', {}, el('strong', {}, (d.type || 'Document') + (d.date_document ? ' du ' + dateFr(d.date_document) : '')),
         el('br'), el('small', {}, [d.nom_fichier, d.montant ? eur(d.montant) : null, d.remarque].filter(Boolean).join(' · '))),
-      el('a', { class: 'mini', href: 'https://drive.google.com/file/d/' + d.drive_id + '/view', target: '_blank', rel: 'noopener' }, 'Ouvrir')));
+      el('a', { class: 'mini', href: lienDrive(d), target: '_blank', rel: 'noopener' }, 'Ouvrir')));
     z.append(el('p', { class: 'petit' }, 'Les documents restent dans le Drive partagé « Commission partenaires » ; leur ouverture demande un compte du club ayant accès à ce Drive.'));
     return z;
   }

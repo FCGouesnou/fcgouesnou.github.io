@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.7 - 12/11/2026 - onglet « Partenaires » (module espace/partenaires.js) pour le CODIR
+  Version : 0.8 - 12/11/2026 - Partenaires 1.1 : tableau de bord, documents avec les contrats, casse à l'enregistrement
+           0.7 - 12/11/2026 - onglet « Partenaires » (module espace/partenaires.js) pour le CODIR
             (consultation) et la commission partenaires (modification)
   Historique :
     0.6   - 12/11/2026 - lieu choisi par commune puis terrain (référentiel Data ES des terrains
@@ -108,6 +109,23 @@
     .seg button.aucun.choisi { background: var(--gris); border-color: var(--gris); }
     /* Partenaires */
     .fenetre.large { max-width: 860px; }
+    .p-tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+    .p-tuile { background: #fff; border: 0; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); text-align: left; color: var(--texte); font: inherit; }
+    .p-tuile.p-cliquable { cursor: pointer; }
+    .p-tuile strong { display: block; font-size: 1.2rem; color: var(--bleu); }
+    .p-tuile span { display: block; font-size: .8rem; color: var(--gris); }
+    .p-tuile small { display: block; font-size: .74rem; color: var(--gris); margin-top: 4px; }
+    .p-tuile-large { grid-column: 1 / -1; }
+    .p-jauge { height: 8px; background: #e6e9f2; border-radius: 4px; margin-top: 8px; overflow: hidden; }
+    .p-jauge div { height: 100%; background: var(--bleu); border-radius: 4px; }
+    .p-evo { display: flex; gap: 10px; align-items: flex-end; height: 170px; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .p-evo-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; font-size: .74rem; color: var(--gris); }
+    .p-evo-barres { flex: 1; width: 100%; display: flex; gap: 3px; align-items: flex-end; justify-content: center; }
+    .p-evo-barres div { width: 40%; max-width: 26px; border-radius: 4px 4px 0 0; }
+    .p-evo-att { background: #c9d1e6; } .p-evo-rec { background: var(--bleu); }
+    .p-leg { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+    .p-bloc-tb { margin-top: 10px; } .p-bloc-tb .p-ligne { margin-top: 6px; }
+    .p-docs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
     .p-resume { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
     .p-resume div { background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
     .p-resume strong { display: block; font-size: 1.15rem; color: var(--bleu); }
@@ -215,7 +233,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.7 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.8 - pilote</p>
     </main>
   </div>
 
@@ -238,7 +256,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.7 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.8 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -248,7 +266,7 @@
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-    import { initPartenaires } from './partenaires.js?v=1.0';
+    import { initPartenaires } from './partenaires.js?v=1.1';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
