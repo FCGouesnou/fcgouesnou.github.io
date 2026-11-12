@@ -6,10 +6,11 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.5 - 12/11/2026 - application installable (manifeste, service worker, icônes),
+  Version : 0.5.1 - 12/11/2026 - bouton « + Nouvel événement » affiché seulement dans « Mes équipes »
+  Historique :
+    0.5   - 12/11/2026 - application installable (manifeste, service worker, icônes),
             notifications : activation par appareil, test, consignes iPhone ; relance manuelle
             des non-répondants par le coach ; appareil détaché du compte à la sortie
-  Historique :
     0.4.2 - 12/11/2026 - sondages SportEasy annulés masqués ; « À venir » limité à mes
             équipes et à ma famille (l'administrateur gère les autres dans « Mes équipes »)
     0.4.1 - 12/11/2026 - version affichée en bas de l'application ; quatre semaines
@@ -178,7 +179,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.5 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.5.1 - pilote</p>
     </main>
   </div>
 
@@ -199,7 +200,7 @@
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.5 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.5.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -361,7 +362,7 @@
       $('bonjour').textContent = moi ? 'Bonjour ' + moi.prenom + '.' : 'Bonjour.';
       const coach = E.coachees.size > 0;
       $('onglets').hidden = !coach;
-      $('btnNouvel').hidden = !coach;
+      $('btnNouvel').hidden = !coach || vue !== 'coach';
       $('vueAvenir').hidden = vue !== 'avenir';
       $('vueCoach').hidden = vue !== 'coach';
       afficherAvenir();
