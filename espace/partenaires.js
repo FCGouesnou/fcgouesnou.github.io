@@ -5,7 +5,8 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.3 - 13/11/2026 - rôle « finances » (comptable) : paiements, relier et écarter les écritures
+  Version : 1.3.1 - 13/11/2026 - casse : « France » retiré, petits mots en minuscules dans les noms composés
+            1.3 - 13/11/2026 - rôle « finances » (comptable) : paiements, relier et écarter les écritures
             1.2 - 12/11/2026 - contrôle compta : boutons « Relier » (crée le paiement à partir de l'écriture)
             et « Écarter » (écriture qui n'est pas un partenariat)
             1.1 - 12/11/2026 - tableau de bord (indicateurs, évolution, paiements attendus, renouvellements,
@@ -18,13 +19,16 @@
 const VOIES = new Set(['rue','avenue','av','boulevard','bd','place','route','impasse','allée','allee','chemin','quai','square','cours','voie','sentier','venelle','passage','rond-point','esplanade']);
 const SIGLES = new Set(['ZA','ZI','ZAC','ZAE','ZAD','BP','CS','CEDEX','RN','RD','SAS','SARL','EURL','SA','SCI','SNC','EARL','TP','II','III','IV']);
 const PETITS = new Set(['ar','an','ann','de','du','des','d','l','et','à','au','aux','sur','sous','en']);
+const TRAIT = new Set(['de','du','des','la','le','les','sur','sous','en','ar','an','aux','au','lès']);
 const maj1 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
 export function casseAdresse(a) {
   let s = String(a ?? '').replace(/\s+/g, ' ').trim().replace(/\u2019/g, "'");
   if (!s) return null;
+  s = s.replace(/,\s*France\s*$/i, '');
   s = s.replace(/([cC])'([hH])/g, (_, c, h) => c + '\u02bc' + h.toLowerCase());
   s = s.replace(/\b([DdLl]) (?=[A-Za-zÀ-ÿ])/g, "$1'");
   s = s.replace(/\b[Rr][Tt][Ee]\b\.?/g, 'route');
+  s = s.replace(/\b[Aa][Vv]\.(?=\s)/g, 'avenue');
   let debut = true, voie = false;
   s = s.split(/(\s+|')/).map((p) => {
     if (!p || /^\s+$/.test(p) || p === "'") return p;
@@ -33,7 +37,7 @@ export function casseAdresse(a) {
     else if (/^\d/.test(p)) w = /^\d+(bis|ter|quater|[a-z])$/i.test(p) ? b : p;
     else if (VOIES.has(b) && !voie) w = b;
     else if (PETITS.has(b) && !debut) w = b;
-    else w = b.split('-').map(maj1).join('-');
+    else w = b.split('-').map((x, i) => i > 0 && TRAIT.has(x) ? x : maj1(x)).join('-');
     if (VOIES.has(b) && !voie) voie = true;
     if (!/^\d/.test(p)) debut = false;
     return w;
@@ -52,7 +56,7 @@ export function casseNom(t) {
   return s.split(/(\s+|-|')/).map((p) => {
     if (!p || /^\s+$/.test(p) || p === '-' || p === "'") return p;
     const b = p.toLowerCase();
-    const w = (!debut && ['de', 'du', 'des', 'd', 'ar', 'an'].includes(b)) ? b : maj1(b);
+    const w = (!debut && ['de', 'du', 'des', 'd', 'ar', 'an', 'la', 'le', 'les', 'sur', 'en'].includes(b)) ? b : maj1(b);
     debut = false; return w;
   }).join('');
 }
