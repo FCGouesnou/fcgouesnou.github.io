@@ -5,7 +5,9 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.1 - 12/11/2026 - tableau de bord (indicateurs, évolution, paiements attendus, renouvellements,
+  Version : 1.2 - 12/11/2026 - contrôle compta : boutons « Relier » (crée le paiement à partir de l'écriture)
+            et « Écarter » (écriture qui n'est pas un partenariat)
+            1.1 - 12/11/2026 - tableau de bord (indicateurs, évolution, paiements attendus, renouvellements,
             actions, fins de contrat, contrôle compta) ; documents du Drive visibles avec les contrats ;
             casse normalisée à l'enregistrement (adresse, ville, nom, prénom, fonction).
             1.0 - 12/11/2026 - première version (reprise du module Partenaires de l'Espace club Apps Script)
@@ -60,7 +62,7 @@ export function initPartenaires(ctx) {
   const euros = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
   const eur = (v) => v === null || v === undefined || v === '' ? '-' : euros.format(Number(v));
   const dateFr = (iso) => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
-  const S = { peutModifier: false, clubId: null, saison: null, entreprises: [], listes: {}, modeles: [], filtre: '', statut: 'actifs', zone: null, vue: 'tableau' };
+  const S = { peutModifier: false, clubId: null, saison: null, entreprises: [], listes: {}, modeles: [], filtre: '', statut: 'actifs', zone: null, vue: 'tableau', ouverts: new Set(['actions', 'paiements']) };
 
   // ---------- Fenêtre large ----------
   function fenetre(titre, remplir) {
@@ -204,10 +206,14 @@ export function initPartenaires(ctx) {
       el('p', { class: 'petit' }, el('span', { class: 'p-leg p-evo-att' }), ' attendu  ', el('span', { class: 'p-leg p-evo-rec' }), ' encaissé'));
 
     // Listes de travail
-    const bloc = (id, titre, lignes, ouvert, rendu) => el('details', { class: 'details-liste p-bloc-tb', id: 'tb-' + id, open: ouvert },
-      el('summary', {}, titre + ' (' + lignes.length + ')'),
-      lignes.length ? lignes.map(x => el('button', { class: 'p-ligne', onclick: () => x.entreprise_id && ouvrirFiche(x.entreprise_id) }, ...rendu(x)))
-                    : [el('p', { class: 'vide' }, 'Rien à signaler.')]);
+    const bloc = (id, titre, lignes, ouvert, rendu, ligne) => {
+      const d = el('details', { class: 'details-liste p-bloc-tb', id: 'tb-' + id, open: S.ouverts.has(id) },
+        el('summary', {}, titre + ' (' + lignes.length + ')'),
+        lignes.length ? lignes.map(x => ligne ? ligne(x) : el('button', { class: 'p-ligne', onclick: () => x.entreprise_id && ouvrirFiche(x.entreprise_id) }, ...rendu(x)))
+                      : [el('p', { class: 'vide' }, 'Rien à signaler.')]);
+      d.addEventListener('toggle', () => { if (d.open) S.ouverts.add(id); else S.ouverts.delete(id); });
+      return d;
+    };
     const retard = (d) => d && d < new Date().toISOString().slice(0, 10);
     zone.append(
       bloc('actions', 'Actions à faire', t.actions, true, (x) => [
@@ -222,9 +228,96 @@ export function initPartenaires(ctx) {
       bloc('fins', 'Contrats qui se terminent cette saison', t.fins_de_contrat, false, (x) => [
         el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.contrat, x.formule, x.tacite ? 'reconduction tacite' : null].filter(Boolean).join(' · '))),
         el('span', { class: 'petit' }, eur(x.montant) + ' · fin ' + dateFr(x.date_fin))]),
-      bloc('compta', 'Contrôle compta : écritures sans paiement relié', t.compta, false, (x) => [
+      bloc('compta', 'Contrôle compta : écritures sans paiement relié', t.compta, false, null, (x) => el('div', { class: 'p-ligne' },
         el('div', { class: 'p-ligne-nom' }, x.nom || 'Entreprise non identifiée', el('small', {}, [dateFr(x.date), x.numero, x.libelle].filter(Boolean).join(' · '))),
-        el('span', { class: 'petit' }, eur(x.montant))]));
+        el('span', { class: 'p-ligne-info' }, el('strong', { class: 'petit' }, eur(x.montant)),
+          S.peutModifier ? el('button', { class: 'mini', onclick: () => formRelier(x) }, 'Relier') : null,
+          S.peutModifier ? el('button', { class: 'mini', onclick: () => ecarter(x) }, 'Écarter') : null))));
+    if (S.ouverts.has('compta') && S.retourCompta) { S.retourCompta = false; document.getElementById('tb-compta')?.scrollIntoView(); }
+  }
+
+  // ---------- Contrôle compta : relier une écriture à une échéance ----------
+  const sansAccent = (t) => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  function devinerEntreprise(x) {
+    if (x.entreprise_id) return x.entreprise_id;
+    const lib = ' ' + sansAccent(x.libelle).replace(/[^a-z0-9]+/g, ' ') + ' ';
+    let best = null, score = 0;
+    for (const e of S.entreprises) {
+      const mots = sansAccent(e.nom).replace(/\(.*?\)/g, ' ').split(/[^a-z0-9]+/).filter(m => m.length >= 4 && !['sarl', 'gouesnou', 'brest', 'garage', 'ecole'].includes(m));
+      const n = mots.filter(m => lib.includes(' ' + m + ' ')).length;
+      if (n > score) { score = n; best = e.id; }
+    }
+    return best;
+  }
+  const saisonDe = (iso) => { const a = Number(iso.slice(0, 4)), m = Number(iso.slice(5, 7)); return m >= 7 ? a + '-' + (a + 1) : (a - 1) + '-' + a; };
+  function retourTableau() { fermer(); S.vue = 'tableau'; S.ouverts.add('compta'); S.retourCompta = true; chargerListe().then(dessiner); }
+
+  function formRelier(x) {
+    fenetre('Relier l\'écriture ' + x.numero, (f) => {
+      const selE = el('select', { class: 'champ' }, el('option', { value: '' }, '- choisir l\'entreprise -'),
+        [...S.entreprises].sort((a, b) => a.nom.localeCompare(b.nom)).map(e => el('option', { value: e.id }, e.nom)));
+      selE.value = devinerEntreprise(x) || '';
+      const zoneEch = el('div', {});
+      const montant = entree(x.montant, { inputmode: 'decimal' });
+      const date = entree(x.date, { type: 'date' });
+      const moyenDevine = /\bCHQ\b|ch[eè]que/i.test(x.libelle || '') ? 'Chèque' : /\bVIRT?\b|virement/i.test(x.libelle || '') ? 'Virement' : null;
+      const moyen = choix('Moyen de paiement', moyenDevine);
+      const ecriture = entree(x.numero);
+      const commentaire = zoneTexte('', 2);
+      const enr = el('button', { class: 'btn principal' }, 'Créer le paiement');
+      let selEch = null, contrats = [];
+      async function chargerEcheances() {
+        zoneEch.replaceChildren(); selEch = null; enr.disabled = true;
+        if (!selE.value) return;
+        const { data } = await sb.from('part_contrats').select('id, ref, formule, echeances:part_echeances(id, saison, objet, montant_attendu), paiements:part_paiements(echeance_id, montant)').eq('entreprise_id', selE.value);
+        contrats = data || [];
+        const ech = contrats.flatMap(c => (c.echeances || []).map(y => ({ ...y, contrat: c,
+          recu: (c.paiements || []).filter(p => p.echeance_id === y.id).reduce((s, p) => s + Number(p.montant), 0) })))
+          .sort((a, b) => a.saison.localeCompare(b.saison) || a.objet.localeCompare(b.objet));
+        if (!ech.length) {
+          zoneEch.append(el('p', { class: 'vide' }, 'Aucun contrat pour cette entreprise. Créez d\'abord le contrat dans sa fiche, puis revenez relier l\'écriture.'),
+            el('button', { class: 'mini', onclick: () => ouvrirFiche(selE.value) }, 'Ouvrir la fiche'));
+          return;
+        }
+        const s = saisonDe(x.date);
+        const defaut = ech.find(y => y.saison === s && y.recu < Number(y.montant_attendu || 0)) || ech.find(y => y.saison === s)
+          || ech.find(y => y.recu < Number(y.montant_attendu || 0)) || ech[ech.length - 1];
+        selEch = el('select', { class: 'champ' }, ech.map(y => el('option', { value: y.id, selected: y === defaut },
+          y.contrat.ref + ' · ' + y.saison + ' - ' + y.objet + ' (' + eur(y.recu) + ' / ' + eur(y.montant_attendu) + ')')));
+        zoneEch.append(champ('Échéance réglée', selEch),
+          el('p', { class: 'petit' }, 'Saison proposée d\'après la date (saison sportive juillet - juin) : ' + s + '. Pour une écriture qui règle deux échéances (contribution et fabrication du panneau), indiquez ici le premier montant, puis ajoutez le second paiement depuis la fiche avec le même numéro d\'écriture.'));
+        enr.disabled = false;
+      }
+      selE.addEventListener('change', chargerEcheances);
+      f.append(el('p', { class: 'petit' }, dateFr(x.date) + ' · ' + x.numero + ' · ' + (x.libelle || '') + ' · ' + eur(x.montant) + (x.compte ? ' · compte ' + x.compte : '')),
+        champ('Entreprise', selE), zoneEch,
+        el('div', { class: 'deux' }, champ('Montant (€)', montant), champ('Reçu le', date)),
+        el('div', { class: 'deux' }, champ('Moyen', moyen), champ('Écriture comptable', ecriture)),
+        champ('Commentaire', commentaire),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermer }, 'Annuler'), enr));
+      chargerEcheances();
+      enr.addEventListener('click', async () => {
+        const m = nombre(montant.value);
+        if (!selEch || !m) { toast('Choisissez l\'échéance et indiquez le montant.'); return; }
+        const y = contrats.flatMap(c => (c.echeances || []).map(e => ({ ...e, contrat_id: c.id }))).find(e => e.id === selEch.value);
+        enr.disabled = true;
+        const { error } = await sb.from('part_paiements').insert({ club_id: S.clubId, contrat_id: y.contrat_id, echeance_id: y.id, montant: m,
+          date_reception: date.value || null, moyen: vide(moyen.value), ecriture: vide(ecriture.value), commentaire: vide(commentaire.value) });
+        if (error) { enr.disabled = false; toast('Erreur : ' + error.message); return; }
+        if (!x.entreprise_id) await sb.from('compta_ecritures').update({ entreprise_id: selE.value }).eq('id', x.id);
+        toast('Paiement créé et relié à l\'écriture ' + x.numero + '.');
+        retourTableau();
+      });
+    });
+  }
+
+  async function ecarter(x) {
+    const motif = prompt('Écarter l\'écriture ' + x.numero + ' (' + eur(x.montant) + ') du contrôle compta.\nMotif (ex. don de particulier, pas un partenariat, doublon) :');
+    if (!motif || !motif.trim()) return;
+    const { data: u } = await sb.auth.getUser();
+    const { error } = await sb.from('compta_ecritures').update({ ecartee: motif.trim(), ecartee_par: (u && u.user && u.user.email) || null }).eq('id', x.id);
+    if (error) { toast('Erreur : ' + error.message); return; }
+    toast('Écriture écartée.'); S.ouverts.add('compta'); S.retourCompta = true; dessiner();
   }
 
   async function nouvelleEntreprise() {
