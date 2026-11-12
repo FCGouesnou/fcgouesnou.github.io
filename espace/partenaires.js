@@ -241,6 +241,9 @@ export function initPartenaires(ctx) {
   function devinerEntreprise(x) {
     if (x.entreprise_id) return x.entreprise_id;
     const lib = ' ' + sansAccent(x.libelle).replace(/[^a-z0-9]+/g, ' ') + ' ';
+    // Noms utilisés par la banque ou la compta (repris de l'ancien rapprochement)
+    const ALIAS = { salgo: 'U Express Gouesnou', kerbar: 'E.Leclerc Gouesnou', somega: 'Atymo', larvor: 'Meubles Gautier Brest', smpi: 'Meubles Gautier Brest' };
+    for (const [m, nom] of Object.entries(ALIAS)) if (lib.includes(' ' + m + ' ')) { const e = S.entreprises.find(z => z.nom === nom); if (e) return e.id; }
     let best = null, score = 0;
     for (const e of S.entreprises) {
       const mots = sansAccent(e.nom).replace(/\(.*?\)/g, ' ').split(/[^a-z0-9]+/).filter(m => m.length >= 4 && !['sarl', 'gouesnou', 'brest', 'garage', 'ecole'].includes(m));
