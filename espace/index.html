@@ -5,9 +5,11 @@
   Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée)
-  Version : 0.4 - 12/11/2026 - équipes A, B, C (U12-U13) : écran « Composer les équipes »,
-            équipe affichée sur les matchs, horaire à confirmer
+  Version : 0.4.1 - 12/11/2026 - version affichée en bas de l'application ; quatre semaines
+            d'événements chargées (au lieu des 40 premiers)
   Historique :
+    0.4   - 12/11/2026 - équipes A, B, C (U12-U13) : écran « Composer les équipes »,
+            équipe affichée sur les matchs, horaire à confirmer
     0.3.1 - 12/11/2026 - logo du club (connexion, bandeau, icône)
     0.3   - 12/11/2026 - écran « À venir », réponse en un geste, désistement, vue coach
     0.2.1 - 12/11/2026 - premier code possible pour toute adresse connue du club
@@ -161,7 +163,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.4 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.4.1 - pilote</p>
     </main>
   </div>
 
@@ -181,6 +183,7 @@
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.4.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -313,7 +316,8 @@
       E.evenements = []; E.convocations = []; E.resumes = new Map();
       if (idsEq.length) {
         const depuis = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
-        const { data: evts } = await sb.from('evenements').select('*').in('equipe_id', idsEq).gte('debut', depuis).order('debut').limit(40);
+        const jusqua = new Date(Date.now() + 28 * 86400 * 1000).toISOString();
+        const { data: evts } = await sb.from('evenements').select('*').in('equipe_id', idsEq).gte('debut', depuis).lte('debut', jusqua).order('debut').limit(150);
         E.evenements = evts || [];
         const idsEvt = E.evenements.map(e => e.id);
         const idsPers = [...E.personnes.keys()];
