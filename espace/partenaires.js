@@ -5,7 +5,8 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.2 - 12/11/2026 - contrôle compta : boutons « Relier » (crée le paiement à partir de l'écriture)
+  Version : 1.3 - 13/11/2026 - rôle « finances » (comptable) : paiements, relier et écarter les écritures
+            1.2 - 12/11/2026 - contrôle compta : boutons « Relier » (crée le paiement à partir de l'écriture)
             et « Écarter » (écriture qui n'est pas un partenariat)
             1.1 - 12/11/2026 - tableau de bord (indicateurs, évolution, paiements attendus, renouvellements,
             actions, fins de contrat, contrôle compta) ; documents du Drive visibles avec les contrats ;
@@ -91,6 +92,7 @@ export function initPartenaires(ctx) {
     const r = roles || [];
     S.lecture = r.some(x => ['admin', 'codir', 'partenaires'].includes(x.role));
     S.peutModifier = r.some(x => ['admin', 'partenaires'].includes(x.role));
+    S.peutCompta = S.peutModifier || r.some(x => x.role === 'finances');
     S.clubId = (r[0] || {}).club_id || null;
     return S.lecture;
   }
@@ -231,8 +233,8 @@ export function initPartenaires(ctx) {
       bloc('compta', 'Contrôle compta : écritures sans paiement relié', t.compta, false, null, (x) => el('div', { class: 'p-ligne' },
         el('div', { class: 'p-ligne-nom' }, x.nom || 'Entreprise non identifiée', el('small', {}, [dateFr(x.date), x.numero, x.libelle].filter(Boolean).join(' · '))),
         el('span', { class: 'p-ligne-info' }, el('strong', { class: 'petit' }, eur(x.montant)),
-          S.peutModifier ? el('button', { class: 'mini', onclick: () => formRelier(x) }, 'Relier') : null,
-          S.peutModifier ? el('button', { class: 'mini', onclick: () => ecarter(x) }, 'Écarter') : null))));
+          S.peutCompta ? el('button', { class: 'mini', onclick: () => formRelier(x) }, 'Relier') : null,
+          S.peutCompta ? el('button', { class: 'mini', onclick: () => ecarter(x) }, 'Écarter') : null))));
     if (S.ouverts.has('compta') && S.retourCompta) { S.retourCompta = false; document.getElementById('tb-compta')?.scrollIntoView(); }
   }
 
@@ -398,14 +400,14 @@ export function initPartenaires(ctx) {
           el('div', { class: 'p-echeance-tete' },
             el('span', {}, el('strong', {}, x.saison), ' - ' + x.objet),
             el('span', { class: 'pastille ' + etat }, eur(recu) + ' / ' + eur(x.montant_attendu)),
-            S.peutModifier ? el('button', { class: 'mini', onclick: () => formPaiement(e, c, x, null) }, '+ Paiement') : null),
+            S.peutCompta ? el('button', { class: 'mini', onclick: () => formPaiement(e, c, x, null) }, '+ Paiement') : null),
           marque(x.a_verifier),
           x.a_verifier && S.peutModifier ? el('button', { class: 'mini', onclick: () => verifie('part_echeances', x.id, e.id) }, 'Vérifié') : null,
           pays.map(p => el('div', { class: 'p-paiement' },
             el('span', {}, eur(p.montant) + ' le ' + dateFr(p.date_reception) + (p.moyen ? ' · ' + p.moyen : '') +
               (p.ecriture ? ' · ' + p.ecriture : '') + (p.exercice ? ' · exercice ' + p.exercice : '')),
             marque(p.a_verifier),
-            S.peutModifier ? el('span', { class: 'p-boutons' },
+            S.peutCompta ? el('span', { class: 'p-boutons' },
               p.a_verifier ? el('button', { class: 'mini', onclick: () => verifie('part_paiements', p.id, e.id) }, 'Vérifié') : null,
               el('button', { class: 'mini', onclick: () => formPaiement(e, c, x, p) }, 'Modifier')) : null))));
       }
