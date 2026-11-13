@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.9.1 - 13/11/2026 - Partenaires 1.4 : listes de travail actionnables (actions, paiements,
+  Version : 0.10 - 14/11/2026 - « Mises à jour SportEasy » (administrateurs) : propositions issues de la
+           comparaison nocturne avec l'extraction SportEasy, à appliquer ou ignorer une par une
+           0.9.1 - 13/11/2026 - Partenaires 1.4 : listes de travail actionnables (actions, paiements,
            renouvellements, échéances, sans suite)
            0.9 - 13/11/2026 - « Voir en tant que » (administrateurs) : aperçu en lecture seule de l'application
            telle qu'une personne la voit, avec sa fiche droits ; chaque aperçu est noté dans le journal
@@ -204,6 +206,12 @@
     .carte-notif .texte { flex: 1; min-width: 200px; color: var(--texte); }
     .carte-notif .texte small { display: block; color: var(--gris); margin-top: 2px; }
     .carte-notif.ok { background: var(--vert-clair); box-shadow: none; }
+    .carte-notif.se { background: var(--orange-clair); box-shadow: none; }
+    .se-groupe { margin: 14px 0 6px; font-weight: 600; color: var(--bleu); font-size: .9rem; }
+    .se-ligne { border-top: 1px solid var(--gris-clair); padding: 10px 0; display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+    .se-ligne .texte { flex: 1; min-width: 220px; font-size: .88rem; }
+    .se-ligne .texte small { display: block; color: var(--gris); margin-top: 3px; }
+    .se-ligne .actions { display: flex; gap: 6px; }
     .flottant { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); background: var(--bleu); color: #fff; border: 0; border-radius: 28px; padding: 14px 20px; font-weight: 600; box-shadow: 0 6px 18px rgba(26,58,143,.35); cursor: pointer; }
 
     /* Fenêtre */
@@ -248,7 +256,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.9.1 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.10 - pilote</p>
     </main>
   </div>
 
@@ -264,6 +272,7 @@
     <div class="contenu">
       <div id="bandeauApercu" class="bandeau-apercu" hidden></div>
       <p class="bonjour" id="bonjour"></p>
+      <div id="carteSportEasy" class="carte-notif se" hidden></div>
       <div id="carteNotif" class="carte-notif" hidden></div>
       <div class="onglets" id="onglets" hidden>
         <button class="onglet actif" data-vue="avenir">À venir</button>
@@ -273,7 +282,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.9.1 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.10 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -413,7 +422,7 @@
       try { const sub = await abonnementActuel(); if (sub) await sbReel.from('appareils').delete().eq('endpoint', sub.endpoint); } catch (e) {}
       await sb.auth.signOut();
     });
-    $('btnActualiser').addEventListener('click', () => charger());
+    $('btnActualiser').addEventListener('click', () => { charger(); majCarteSportEasy(); });
 
     // ---------- Chargement des données ----------
     async function charger() {
@@ -1010,7 +1019,7 @@
     async function relancerVue() {
       P = null; partenairesOk = false;
       revenirAvenir();
-      await charger(); majCarteNotif(); await preparerPartenaires();
+      await charger(); majCarteNotif(); majCarteSportEasy(); await preparerPartenaires();
     }
     function ficheDroits(a) {
       const roles = a.roles.map(r => r.role);
@@ -1078,6 +1087,72 @@
       const { data } = await sbReel.rpc('mes_roles');
       AP.suisAdmin = (data || []).some(r => r.role === 'admin');
       $('btnApercu').hidden = !AP.suisAdmin;
+      majCarteSportEasy();
+    }
+
+    // ---------- Mises à jour SportEasy (administrateurs) ----------
+    // La comparaison nocturne (Apps Script puis fonction « comparer-sporteasy ») n'applique rien :
+    // chaque écart est une proposition à appliquer ou à ignorer ici. Une proposition ignorée ne revient pas.
+    const SE_GROUPES = [
+      ['nouveau_membre', 'Nouveaux membres d\'équipe'], ['depart', 'Départs'], ['role', 'Rôles'],
+      ['coordonnees', 'Coordonnées'], ['annee', 'Années de naissance'],
+      ['parent_ajout', 'Parents à rattacher'], ['parent_maj', 'Parents à mettre à jour'], ['lien_retire', 'Parents à détacher'],
+    ];
+    async function lirePropositionsSE() {
+      const { data, error } = await sbReel.from('maj_sporteasy').select('id, type, libelle, detail, fichier, cree_le')
+        .eq('statut', 'à valider').order('type').order('libelle');
+      if (error) throw error;
+      return data || [];
+    }
+    async function majCarteSportEasy() {
+      const c = $('carteSportEasy');
+      if (!AP.suisAdmin || AP.actif) { c.hidden = true; return; }
+      let props = [];
+      try { props = await lirePropositionsSE(); } catch (e) { c.hidden = true; return; }
+      c.replaceChildren();
+      if (!props.length) { c.hidden = true; return; }
+      c.append(el('div', { class: 'texte' }, 'Mises à jour SportEasy : ' + props.length + ' proposition' + (props.length > 1 ? 's' : '') + ' à valider',
+          el('small', {}, 'Extraction « ' + (props[0].fichier || 'SportEasy') + ' ». Rien n\'est modifié sans votre accord.')),
+        el('button', { class: 'mini principal', onclick: ouvrirSportEasy }, 'Voir'));
+      c.hidden = false;
+    }
+    async function ouvrirSportEasy() {
+      let props;
+      try { props = await lirePropositionsSE(); } catch (e) { toast('Erreur : ' + e.message); return; }
+      ouvrirFenetre('Mises à jour SportEasy', (f) => {
+        f.classList.add('large');
+        f.append(el('p', { class: 'petit' }, 'Différences entre la dernière extraction SportEasy et l\'application. « Appliquer » modifie la fiche ; « Ignorer » écarte la proposition, qui ne reviendra pas.'));
+        const zone = el('div', {});
+        const dessiner = () => {
+          zone.replaceChildren();
+          if (!props.length) { zone.append(el('p', { class: 'vide' }, 'Plus aucune proposition à valider.')); return; }
+          for (const [type, titreGroupe] of SE_GROUPES) {
+            const liste = props.filter(p => p.type === type);
+            if (!liste.length) continue;
+            zone.append(el('div', { class: 'se-groupe' }, titreGroupe + ' (' + liste.length + ')'));
+            for (const p of liste) {
+              const traiter = async (fonction, bouton) => {
+                bouton.disabled = true;
+                const { error } = await sbReel.rpc(fonction, { p_id: p.id });
+                if (error) { bouton.disabled = false; toast('Erreur : ' + error.message); return; }
+                toast(fonction === 'maj_sporteasy_appliquer' ? 'Appliqué.' : 'Ignoré.');
+                props = props.filter(x => x.id !== p.id);
+                dessiner(); majCarteSportEasy();
+                if (fonction === 'maj_sporteasy_appliquer') charger();
+              };
+              const bA = el('button', { class: 'mini principal' }, 'Appliquer');
+              const bI = el('button', { class: 'mini' }, 'Ignorer');
+              bA.onclick = () => traiter('maj_sporteasy_appliquer', bA);
+              bI.onclick = () => traiter('maj_sporteasy_ignorer', bI);
+              zone.append(el('div', { class: 'se-ligne' },
+                el('div', { class: 'texte' }, p.libelle, p.detail ? el('small', {}, p.detail) : null),
+                el('div', { class: 'actions' }, bA, bI)));
+            }
+          }
+        };
+        dessiner();
+        f.append(zone, el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+      });
     }
 
     // ---------- Session ----------
@@ -1085,7 +1160,7 @@
       session = s;
       $('ecranConnexion').hidden = !!s;
       $('ecranAppli').hidden = !s;
-      if (!s) { AP.actif = null; AP.suisAdmin = false; dessinerBandeau(); $('btnApercu').hidden = true; }
+      if (!s) { AP.actif = null; AP.suisAdmin = false; dessinerBandeau(); $('btnApercu').hidden = true; $('carteSportEasy').hidden = true; }
       if (s) setTimeout(() => { charger(); majCarteNotif(); preparerPartenaires(); verifierAdmin(); }, 0);
     }
     sb.auth.onAuthStateChange((evenement, s) => {
