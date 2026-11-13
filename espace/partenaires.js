@@ -5,7 +5,9 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.4 - 13/11/2026 - listes de travail actionnables (reprise des derniers écrans de l'ancien module) :
+  Version : 1.4.1 - 13/11/2026 - balises des modèles toutes remplacées : {{Formule}}, {{Montant}}, {{DateFin}}
+            (dernier contrat), {{Saison}}, {{Référent}} = personne connectée qui prépare le mail
+            1.4 - 13/11/2026 - listes de travail actionnables (reprise des derniers écrans de l'ancien module) :
             actions (Fait avec compte rendu, Mail, +7 j, Annuler), paiements attendus (rappel de paiement),
             à renouveler (mail de reconduction, appel, ne renouvelle pas), échéances (fins de contrat sous 120 j,
             anniversaires sous 60 j : mail, visite), sans suite (relance) ; mails pré-remplis depuis les listes
@@ -102,6 +104,12 @@ export function initPartenaires(ctx) {
     S.peutModifier = r.some(x => ['admin', 'partenaires'].includes(x.role));
     S.peutCompta = S.peutModifier || r.some(x => x.role === 'finances');
     S.clubId = (r[0] || {}).club_id || null;
+    // Nom de la personne connectée, pour la balise {{Référent}} des modèles de mail
+    try {
+      const { data: u } = await sb.auth.getUser();
+      const { data: moi } = await sb.from('personnes').select('prenom, nom').eq('user_id', u.user.id).limit(1);
+      S.moi = moi && moi[0] ? [moi[0].prenom, moi[0].nom].filter(Boolean).join(' ') : '';
+    } catch (e) { S.moi = ''; }
     return S.lecture;
   }
   async function chargerReferentiels() {
@@ -334,13 +342,14 @@ export function initPartenaires(ctx) {
   }
   // Mail pré-rempli depuis une liste : contact principal de l'entreprise, modèle choisi
   async function ecrireA(entrepriseId, modele, actionId) {
-    const [{ data: e }, { data: cts }] = await Promise.all([
+    const [{ data: e }, { data: cts }, { data: kts }] = await Promise.all([
       sb.from('part_entreprises').select('*').eq('id', entrepriseId).single(),
-      sb.from('part_contacts').select('*').eq('entreprise_id', entrepriseId).order('principal', { ascending: false })]);
+      sb.from('part_contacts').select('*').eq('entreprise_id', entrepriseId).order('principal', { ascending: false }),
+      sb.from('part_contrats').select('formule, montant_annuel, date_fin, saison_debut').eq('entreprise_id', entrepriseId).order('saison_debut', { ascending: false }).limit(1)]);
     if (!e) { toast('Entreprise introuvable.'); return; }
     const contact = (cts || []).find(c => c.principal && c.email) || (cts || []).find(c => c.email) || (cts || [])[0] || null;
     if (!((contact && contact.email) || e.email)) { toast('Aucune adresse mail pour ' + e.nom + ' : complétez la fiche.'); ouvrirFiche(e.id); return; }
-    ecrire(e, contact, { modele, actionId, retour: fermer });
+    ecrire(e, contact, { modele, actionId, retour: fermer, contrat: (kts || [])[0] || null });
   }
 
   // ---------- Contrôle compta : relier une écriture à une échéance ----------
@@ -464,7 +473,7 @@ export function initPartenaires(ctx) {
       const principal = (contacts || []).find(c => c.principal && c.email) || (contacts || []).find(c => c.email);
       f.append(el('p', { class: 'petit' }, [e.ref, e.statut, e.secteur, e.ville, e.referent ? 'référent ' + e.referent : null].filter(Boolean).join(' · ')),
         el('div', { class: 'actions-coach' },
-          principal || e.email ? el('button', { class: 'mini', onclick: () => ecrire(e, principal) }, 'Écrire un mail') : null,
+          principal || e.email ? el('button', { class: 'mini', onclick: () => ecrire(e, principal, { contrat: [...(contrats || [])].sort((x, y) => (y.saison_debut || '').localeCompare(x.saison_debut || ''))[0] || null }) }, 'Écrire un mail') : null,
           el('button', { class: 'mini', onclick: fermer }, 'Fermer')),
         onglets, corps);
       corps.append(sections[0][1]());
@@ -738,10 +747,14 @@ export function initPartenaires(ctx) {
   function ecrire(e, contact, opt = {}) {
     fenetre('Écrire à ' + e.nom, (f) => {
       const a = (contact && contact.email) || e.email;
-      const sel = el('select', { class: 'champ' }, el('option', { value: '' }, 'Mail libre'), S.modeles.map(m => el('option', { value: m.code }, m.code + ' - ' + (m.usage || ''))));
+      const sel = el('select', { class: 'champ' }, el('option', { value: '' }, 'Mail libre'), S.modeles.filter(m => /^[A-Z ]+$/.test(m.code)).map(m => el('option', { value: m.code }, m.code + ' - ' + (m.usage || ''))));
       const objet = entree(''); const texte = zoneTexte('', 10);
+      const k = opt.contrat || null;
       const remplacer = (t) => (t || '').replaceAll('{{Civilité}}', (contact && contact.civilite) || '').replaceAll('{{Nom}}', (contact && contact.nom) || '')
-        .replaceAll('{{Prénom}}', (contact && contact.prenom) || '').replaceAll('{{Entreprise}}', e.nom || '').replaceAll('{{Référent}}', e.referent || '')
+        .replaceAll('{{Prénom}}', (contact && contact.prenom) || '').replaceAll('{{Entreprise}}', e.nom || '')
+        .replaceAll('{{Référent}}', S.moi || e.referent || '').replaceAll('{{Saison}}', S.saison || '')
+        .replaceAll('{{Formule}}', (k && k.formule) || '').replaceAll('{{Montant}}', k && k.montant_annuel ? eur(k.montant_annuel) : '')
+        .replaceAll('{{DateFin}}', k && k.date_fin ? dateFr(k.date_fin) : '')
         .replace(/ {2,}/g, ' ');
       const appliquer = () => { const m = S.modeles.find(x => x.code === sel.value); objet.value = remplacer(m && m.objet); texte.value = remplacer(m && m.texte); };
       sel.addEventListener('change', appliquer);
