@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.9 - 13/11/2026 - « Voir en tant que » (administrateurs) : aperçu en lecture seule de l'application
+  Version : 0.9.1 - 13/11/2026 - Partenaires 1.4 : listes de travail actionnables (actions, paiements,
+           renouvellements, échéances, sans suite)
+           0.9 - 13/11/2026 - « Voir en tant que » (administrateurs) : aperçu en lecture seule de l'application
            telle qu'une personne la voit, avec sa fiche droits ; chaque aperçu est noté dans le journal
            0.8.3 - 13/11/2026 - Partenaires 1.3 : rôle « finances » pour le comptable
            0.8.2 - 12/11/2026 - Partenaires 1.2 : relier ou écarter les écritures du contrôle compta
@@ -195,6 +197,9 @@
     .actions-coach { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
     .mini { border: 0; border-radius: 8px; padding: 8px 10px; font-size: .82rem; font-weight: 600; cursor: pointer; background: var(--bleu-clair); color: var(--bleu); }
     .mini.danger { background: var(--rouge-clair); color: var(--rouge); }
+    .mini.principal { background: var(--bleu); color: #fff; }
+    .p-lien { background: none; border: 0; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; flex: 1; min-width: 180px; }
+    .p-bloc-tb div.p-ligne { cursor: default; }
     .carte-notif { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 12px 14px; margin-bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: .88rem; }
     .carte-notif .texte { flex: 1; min-width: 200px; color: var(--texte); }
     .carte-notif .texte small { display: block; color: var(--gris); margin-top: 2px; }
@@ -243,7 +248,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.9 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.9.1 - pilote</p>
     </main>
   </div>
 
@@ -268,7 +273,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.9 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.9.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -278,7 +283,7 @@
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-    import { initPartenaires } from './partenaires.js?v=1.3.1';
+    import { initPartenaires } from './partenaires.js?v=1.4';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';

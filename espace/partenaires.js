@@ -5,7 +5,11 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.3.1 - 13/11/2026 - casse : « France » retiré, petits mots en minuscules dans les noms composés
+  Version : 1.4 - 13/11/2026 - listes de travail actionnables (reprise des derniers écrans de l'ancien module) :
+            actions (Fait avec compte rendu, Mail, +7 j, Annuler), paiements attendus (rappel de paiement),
+            à renouveler (mail de reconduction, appel, ne renouvelle pas), échéances (fins de contrat sous 120 j,
+            anniversaires sous 60 j : mail, visite), sans suite (relance) ; mails pré-remplis depuis les listes
+            1.3.1 - 13/11/2026 - casse : « France » retiré, petits mots en minuscules dans les noms composés
             1.3 - 13/11/2026 - rôle « finances » (comptable) : paiements, relier et écarter les écritures
             1.2 - 12/11/2026 - contrôle compta : boutons « Relier » (crée le paiement à partir de l'écriture)
             et « Écarter » (écriture qui n'est pas un partenariat)
@@ -176,7 +180,10 @@ export function initPartenaires(ctx) {
   // ---------- Tableau de bord ----------
   async function dessinerTableau(zone) {
     zone.replaceChildren(el('p', { class: 'petit' }, 'Calcul du tableau de bord...'));
-    const { data: t, error } = await sb.rpc('part_tableau_bord');
+    const [{ data: t, error }, { data: kts }, { data: acts }] = await Promise.all([
+      sb.rpc('part_tableau_bord'),
+      sb.from('part_contrats').select('id, ref, entreprise_id, formule, detail, montant_annuel, date_debut, date_fin, statut, reconduction_tacite'),
+      sb.from('part_actions').select('entreprise_id, statut, date_prevue, date_realisee, type, objet')]);
     if (error || !t) { zone.replaceChildren(el('p', { class: 'vide' }, 'Tableau de bord indisponible : ' + (error ? error.message : 'aucune donnée'))); return; }
     const i = t.indicateurs;
     const taux = i.attendu ? Math.round(100 * i.recu / i.attendu) : 0;
@@ -220,26 +227,120 @@ export function initPartenaires(ctx) {
       d.addEventListener('toggle', () => { if (d.open) S.ouverts.add(id); else S.ouverts.delete(id); });
       return d;
     };
-    const retard = (d) => d && d < new Date().toISOString().slice(0, 10);
+    const auj = new Date().toISOString().slice(0, 10);
+    const retard = (d) => d && d < auj;
+    const nomDe = (id) => (S.entreprises.find(e => e.id === id) || {}).nom || '-';
+    const statutDe = (id) => (S.entreprises.find(e => e.id === id) || {}).statut || '';
+    const jours = (iso) => Math.round((new Date(iso + 'T00:00:00') - new Date(auj + 'T00:00:00')) / 86400000);
+    const peut = S.peutModifier;
+    // Ligne de travail : le nom ouvre la fiche, les boutons agissent directement
+    const ligneTravail = (entrepriseId, nom, sous, info, boutons) => el('div', { class: 'p-ligne' },
+      el('button', { class: 'p-ligne-nom p-lien', onclick: () => entrepriseId && ouvrirFiche(entrepriseId) }, nom || '-', el('small', {}, sous || '')),
+      el('span', { class: 'p-ligne-info' }, info, ...(peut ? boutons.filter(Boolean) : [])));
+    const btn = (texte, action, principal) => el('button', { class: 'mini' + (principal ? ' principal' : ''), onclick: action }, texte);
+
+    // Échéances : fins de contrat sous 120 jours, anniversaires (contrats pluriannuels) sous 60 jours
+    const echeances = [];
+    for (const k of kts || []) {
+      if (!k.date_fin || k.statut === 'Échu') continue;
+      const jf = jours(k.date_fin);
+      if (jf >= 0 && jf <= 120) { echeances.push({ k, type: 'Fin de contrat', date: k.date_fin, j: jf }); continue; }
+      if (k.date_debut && jf > 0) {
+        const an = new Date(auj.slice(0, 4) + k.date_debut.slice(4) + 'T00:00:00');
+        if (an.toISOString().slice(0, 10) < auj) an.setFullYear(an.getFullYear() + 1);
+        const iso = an.toISOString().slice(0, 10), ja = jours(iso);
+        if (iso < k.date_fin && ja <= 60) echeances.push({ k, type: 'Anniversaire', date: iso, j: ja });
+      }
+    }
+    echeances.sort((a, b) => a.j - b.j);
+
+    // Sans suite : statuts à suivre, dernier contact ancien, aucune action prévue
+    const delai = Number(((S.listes['Relance sans réponse (jours)'] || [])[0])) || 15;
+    const parEnt = {};
+    for (const a of acts || []) {
+      const x = parEnt[a.entreprise_id] = parEnt[a.entreprise_id] || { derniere: null, der: null, prevue: false };
+      if (a.statut === 'À faire') x.prevue = true;
+      const d = a.statut === 'Fait' ? (a.date_realisee || a.date_prevue) : null;
+      if (d && (!x.derniere || d > x.derniere)) { x.derniere = d; x.der = a; }
+    }
+    const sansSuite = S.entreprises.filter(e => ['Prospect', 'À redémarcher', 'À confirmer', 'À renouveler'].includes(e.statut))
+      .map(e => ({ e, x: parEnt[e.id] || {} })).filter(o => o.x.derniere && !o.x.prevue && -jours(o.x.derniere) >= delai)
+      .sort((a, b) => a.x.derniere.localeCompare(b.x.derniere));
+
     zone.append(
-      bloc('actions', 'Actions à faire', t.actions, true, (x) => [
-        el('div', { class: 'p-ligne-nom' }, x.nom || '-', el('small', {}, [x.type, x.objet, x.responsable].filter(Boolean).join(' · '))),
-        el('span', { class: 'pastille ' + (retard(x.date_prevue) ? 'p-annule' : 'p-autre') }, x.date_prevue ? dateFr(x.date_prevue) : 'sans date')]),
-      bloc('paiements', 'Paiements attendus en ' + t.saison, t.paiements_attendus, true, (x) => [
-        el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.contrat, x.objet].filter(Boolean).join(' · '))),
-        el('span', { class: 'pastille ' + (Number(x.recu) > 0 ? 'p-match' : 'p-annule') }, eur(x.recu) + ' / ' + eur(x.attendu))]),
-      bloc('renouvellements', 'À renouveler (partenaires ' + t.saison_precedente + ' sans contrat en ' + t.saison + ')', t.renouvellements, false, (x) => [
-        el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.statut, x.prochaine_action ? 'action prévue le ' + dateFr(x.prochaine_action) : 'aucune action prévue'].filter(Boolean).join(' · '))),
-        el('span', { class: 'petit' }, eur(x.montant))]),
-      bloc('fins', 'Contrats qui se terminent cette saison', t.fins_de_contrat, false, (x) => [
-        el('div', { class: 'p-ligne-nom' }, x.nom, el('small', {}, [x.contrat, x.formule, x.tacite ? 'reconduction tacite' : null].filter(Boolean).join(' · '))),
-        el('span', { class: 'petit' }, eur(x.montant) + ' · fin ' + dateFr(x.date_fin))]),
+      bloc('actions', 'Actions à faire', t.actions, true, null, (x) => ligneTravail(x.entreprise_id, x.nom,
+        [x.type, x.objet, x.responsable].filter(Boolean).join(' · '),
+        el('span', { class: 'pastille ' + (retard(x.date_prevue) ? 'p-annule' : 'p-autre') }, x.date_prevue ? dateFr(x.date_prevue) : 'sans date'),
+        [btn('Fait', () => terminerAction(x), true),
+         btn('Mail', () => ecrireA(x.entreprise_id, x.type === 'Relance' ? 'RELANCE' : 'PROSPECTION', x.id)),
+         btn('+7 j', () => majAction(x.id, { date_prevue: isoDans(Math.max(7, (x.date_prevue ? jours(x.date_prevue) : 0) + 7)) }, 'Action reportée.')),
+         btn('Annuler', () => { if (confirm('Annuler l\'action « ' + (x.objet || x.type || '') + ' » (' + (x.nom || '') + ') ?')) majAction(x.id, { statut: 'Annulé' }, 'Action annulée.'); })])),
+      bloc('paiements', 'Paiements attendus en ' + t.saison, t.paiements_attendus, true, null, (x) => ligneTravail(x.entreprise_id, x.nom,
+        [x.contrat, x.objet].filter(Boolean).join(' · '),
+        el('span', { class: 'pastille ' + (Number(x.recu) > 0 ? 'p-match' : 'p-annule') }, eur(x.recu) + ' / ' + eur(x.attendu)),
+        [btn('Rappel de paiement', () => ecrireA(x.entreprise_id, 'RAPPEL PAIEMENT'), true)])),
+      bloc('renouvellements', 'À renouveler (partenaires ' + t.saison_precedente + ' sans contrat en ' + t.saison + ')', t.renouvellements, false, null, (x) => ligneTravail(x.entreprise_id, x.nom,
+        [x.statut, x.prochaine_action ? 'action prévue le ' + dateFr(x.prochaine_action) : 'aucune action prévue'].filter(Boolean).join(' · '),
+        el('span', { class: 'petit' }, eur(x.montant)),
+        [btn('Mail de reconduction', () => ecrireA(x.entreprise_id, S.modeles.some(m => m.code === 'RECONDUCTION') ? 'RECONDUCTION' : 'RENOUVELLEMENT'), true),
+         btn('Planifier un appel', () => planifier(x.entreprise_id, 'Appel', 7, 'Reconduction du partenariat pour la saison ' + t.saison)),
+         btn('Ne renouvelle pas', () => { if (confirm(x.nom + ' passera au statut « Ancien partenaire ». Continuer ?')) changerStatut(x.entreprise_id, 'Ancien partenaire'); })])),
+      bloc('echeances', 'Échéances (fins de contrat sous 120 jours, anniversaires sous 60 jours)', echeances, false, null, (o) => ligneTravail(o.k.entreprise_id, nomDe(o.k.entreprise_id),
+        [o.type, o.k.ref, o.k.formule, o.k.reconduction_tacite ? 'reconduction tacite' : null].filter(Boolean).join(' · '),
+        el('span', { class: 'petit' }, dateFr(o.date) + (o.k.montant_annuel ? ' · ' + eur(o.k.montant_annuel) : '')),
+        [btn(o.type === 'Fin de contrat' ? 'Mail de renouvellement' : 'Mail', () => ecrireA(o.k.entreprise_id, o.type === 'Fin de contrat' ? 'RENOUVELLEMENT' : 'RAPPEL PAIEMENT'), true),
+         btn('Planifier une visite', () => planifier(o.k.entreprise_id, 'Visite', 7, (o.type === 'Fin de contrat' ? 'Renouvellement du contrat ' : 'Anniversaire du contrat ') + o.k.ref + (o.k.formule ? ' (' + o.k.formule + ')' : '')))])),
+      bloc('sanssuite', 'Sans suite (dernier contact il y a plus de ' + delai + ' jours, aucune action prévue)', sansSuite, false, null, (o) => ligneTravail(o.e.id, o.e.nom,
+        [o.e.statut, o.x.der && [o.x.der.type, o.x.der.objet].filter(Boolean).join(' : ')].filter(Boolean).join(' · '),
+        el('span', { class: 'petit' }, 'il y a ' + (-jours(o.x.derniere)) + ' j'),
+        [btn('Mail de relance', () => ecrireA(o.e.id, 'RELANCE'), true),
+         btn('Planifier une relance', () => planifier(o.e.id, 'Relance', 0, 'Relance suite au contact du ' + dateFr(o.x.derniere)))])),
       bloc('compta', 'Contrôle compta : écritures sans paiement relié', t.compta, false, null, (x) => el('div', { class: 'p-ligne' },
         el('div', { class: 'p-ligne-nom' }, x.nom || 'Entreprise non identifiée', el('small', {}, [dateFr(x.date), x.numero, x.libelle].filter(Boolean).join(' · '))),
         el('span', { class: 'p-ligne-info' }, el('strong', { class: 'petit' }, eur(x.montant)),
           S.peutCompta ? el('button', { class: 'mini', onclick: () => formRelier(x) }, 'Relier') : null,
           S.peutCompta ? el('button', { class: 'mini', onclick: () => ecarter(x) }, 'Écarter') : null))));
+    if (S.retourBloc) { const b = document.getElementById('tb-' + S.retourBloc); S.retourBloc = null; b && b.scrollIntoView(); }
     if (S.ouverts.has('compta') && S.retourCompta) { S.retourCompta = false; document.getElementById('tb-compta')?.scrollIntoView(); }
+  }
+
+  // ---------- Actions depuis les listes de travail ----------
+  const isoDans = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  function apresListe(bloc, message) { toast(message); fermer(); S.vue = 'tableau'; S.ouverts.add(bloc); S.retourBloc = bloc; chargerListe().then(dessiner); }
+  async function majAction(id, champs, message) {
+    const { error } = await sb.from('part_actions').update(champs).eq('id', id);
+    if (error) { toast('Erreur : ' + error.message); return; }
+    apresListe('actions', message);
+  }
+  function terminerAction(x) {
+    fenetre('Action faite - ' + (x.nom || ''), (f) => {
+      const cr = zoneTexte('', 4); const date = entree(new Date().toISOString().slice(0, 10), { type: 'date' });
+      f.append(el('p', { class: 'petit' }, [x.type, x.objet].filter(Boolean).join(' : ')), champ('Fait le', date), champ('Compte rendu (facultatif)', cr),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermer }, 'Annuler'),
+          el('button', { class: 'btn principal', onclick: () => majAction(x.id, { statut: 'Fait', date_realisee: date.value || null, compte_rendu: vide(cr.value) }, 'Action notée comme faite.') }, 'Enregistrer')));
+    });
+  }
+  async function planifier(entrepriseId, type, dans, objet) {
+    const e = S.entreprises.find(z => z.id === entrepriseId) || {};
+    const { error } = await sb.from('part_actions').insert({ club_id: S.clubId, entreprise_id: entrepriseId, type, statut: 'À faire',
+      date_prevue: isoDans(dans), objet, responsable: e.referent || null });
+    if (error) { toast('Erreur : ' + error.message); return; }
+    apresListe('actions', type + ' prévu(e) le ' + dateFr(isoDans(dans)) + ' pour ' + (e.nom || 'l\'entreprise') + '.');
+  }
+  async function changerStatut(entrepriseId, statut) {
+    const { error } = await sb.from('part_entreprises').update({ statut }).eq('id', entrepriseId);
+    if (error) { toast('Erreur : ' + error.message); return; }
+    apresListe('renouvellements', 'Statut mis à jour : ' + statut + '.');
+  }
+  // Mail pré-rempli depuis une liste : contact principal de l'entreprise, modèle choisi
+  async function ecrireA(entrepriseId, modele, actionId) {
+    const [{ data: e }, { data: cts }] = await Promise.all([
+      sb.from('part_entreprises').select('*').eq('id', entrepriseId).single(),
+      sb.from('part_contacts').select('*').eq('entreprise_id', entrepriseId).order('principal', { ascending: false })]);
+    if (!e) { toast('Entreprise introuvable.'); return; }
+    const contact = (cts || []).find(c => c.principal && c.email) || (cts || []).find(c => c.email) || (cts || [])[0] || null;
+    if (!((contact && contact.email) || e.email)) { toast('Aucune adresse mail pour ' + e.nom + ' : complétez la fiche.'); ouvrirFiche(e.id); return; }
+    ecrire(e, contact, { modele, actionId, retour: fermer });
   }
 
   // ---------- Contrôle compta : relier une écriture à une échéance ----------
@@ -634,7 +735,7 @@ export function initPartenaires(ctx) {
   }
 
   // Mail : le modèle s'ouvre dans la messagerie de la personne connectée
-  function ecrire(e, contact) {
+  function ecrire(e, contact, opt = {}) {
     fenetre('Écrire à ' + e.nom, (f) => {
       const a = (contact && contact.email) || e.email;
       const sel = el('select', { class: 'champ' }, el('option', { value: '' }, 'Mail libre'), S.modeles.map(m => el('option', { value: m.code }, m.code + ' - ' + (m.usage || ''))));
@@ -642,14 +743,20 @@ export function initPartenaires(ctx) {
       const remplacer = (t) => (t || '').replaceAll('{{Civilité}}', (contact && contact.civilite) || '').replaceAll('{{Nom}}', (contact && contact.nom) || '')
         .replaceAll('{{Prénom}}', (contact && contact.prenom) || '').replaceAll('{{Entreprise}}', e.nom || '').replaceAll('{{Référent}}', e.referent || '')
         .replace(/ {2,}/g, ' ');
-      sel.addEventListener('change', () => { const m = S.modeles.find(x => x.code === sel.value); objet.value = remplacer(m && m.objet); texte.value = remplacer(m && m.texte); });
+      const appliquer = () => { const m = S.modeles.find(x => x.code === sel.value); objet.value = remplacer(m && m.objet); texte.value = remplacer(m && m.texte); };
+      sel.addEventListener('change', appliquer);
+      if (opt.modele && S.modeles.some(m => m.code === opt.modele)) { sel.value = opt.modele; appliquer(); }
       f.append(el('p', { class: 'petit' }, 'Destinataire : ' + a), champ('Modèle', sel), champ('Objet', objet), champ('Texte', texte),
-        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => ouvrirFiche(e.id) }, 'Retour'),
-          el('button', { class: 'btn principal', onclick: () => {
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => opt.retour ? opt.retour() : ouvrirFiche(e.id) }, 'Retour'),
+          el('button', { class: 'btn principal', onclick: async () => {
             location.href = 'mailto:' + encodeURIComponent(a) + '?subject=' + encodeURIComponent(objet.value) + '&body=' + encodeURIComponent(texte.value);
-            if (S.peutModifier && sel.value) sb.from('part_actions').insert({ club_id: S.clubId, entreprise_id: e.id, type: 'Mail', statut: 'Fait',
+            if (S.peutModifier && sel.value) await sb.from('part_actions').insert({ club_id: S.clubId, entreprise_id: e.id, type: 'Mail', statut: 'Fait',
               date_prevue: new Date().toISOString().slice(0, 10), date_realisee: new Date().toISOString().slice(0, 10),
               objet: objet.value, modele_mail: sel.value, contact: contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : null });
+            // Mail préparé depuis une action à faire : l'action passe à « Fait »
+            if (S.peutModifier && opt.actionId) await sb.from('part_actions').update({ statut: 'Fait', date_realisee: new Date().toISOString().slice(0, 10),
+              compte_rendu: 'Mail envoyé : ' + objet.value }).eq('id', opt.actionId);
+            if (opt.retour) apresListe(opt.actionId ? 'actions' : 'renouvellements', 'Mail ouvert dans votre messagerie et noté dans l\'historique.');
           } }, 'Ouvrir dans ma messagerie')));
     });
   }
