@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.10 - 14/11/2026 - « Mises à jour SportEasy » (administrateurs) : propositions issues de la
+  Version : 0.11 - 14/11/2026 - covoiturage des matchs et tournois : proposer des places, chercher une place,
+           réserver ou libérer une place pour son enfant ; téléphones visibles entre les personnes concernées
+           0.10 - 14/11/2026 - « Mises à jour SportEasy » (administrateurs) : propositions issues de la
            comparaison nocturne avec l'extraction SportEasy, à appliquer ou ignorer une par une
            0.9.1 - 13/11/2026 - Partenaires 1.4 : listes de travail actionnables (actions, paiements,
            renouvellements, échéances, sans suite)
@@ -212,6 +214,17 @@
     .se-ligne .texte { flex: 1; min-width: 220px; font-size: .88rem; }
     .se-ligne .texte small { display: block; color: var(--gris); margin-top: 3px; }
     .se-ligne .actions { display: flex; gap: 6px; }
+    .covoit { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: .85rem; }
+    .covoit .texte { flex: 1; min-width: 180px; color: var(--gris); }
+    .covoit .texte strong { color: var(--texte); font-weight: 600; }
+    .cv-bloc { border-top: 1px solid var(--gris-clair); padding: 10px 0; font-size: .88rem; }
+    .cv-bloc .cv-titre { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; flex-wrap: wrap; }
+    .cv-bloc .cv-titre .libre { color: var(--vert); font-weight: 500; }
+    .cv-bloc .cv-titre .plein { color: var(--gris); font-weight: 500; }
+    .cv-bloc .cv-info { color: var(--gris); margin-top: 3px; }
+    .cv-bloc .cv-passager { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 4px 0 0 12px; }
+    .cv-bloc .cv-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .cv-bloc a { color: var(--bleu); }
     .flottant { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); background: var(--bleu); color: #fff; border: 0; border-radius: 28px; padding: 14px 20px; font-weight: 600; box-shadow: 0 6px 18px rgba(26,58,143,.35); cursor: pointer; }
 
     /* Fenêtre */
@@ -256,7 +269,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.10 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.11 - pilote</p>
     </main>
   </div>
 
@@ -282,7 +295,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.10 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.11 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -309,7 +322,7 @@
     // Pendant un aperçu, toute écriture est refusée côté écran et les fonctions qui dépendent
     // de la personne connectée renvoient les valeurs calculées pour la personne observée.
     const AP = { actif: null, suisAdmin: false };
-    const RPC_LECTURE = new Set(['convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord']);
+    const RPC_LECTURE = new Set(['covoiturage_evenements', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord']);
     const MSG_APERCU = 'Aperçu en lecture seule : aucune modification n\'est enregistrée.';
     function refus() {
       const r = { data: null, error: { message: MSG_APERCU } };
@@ -355,7 +368,7 @@
     let session = null;
     let emailEnCours = '';
     const E = { fiches: [], personnes: new Map(), repondPour: new Set(), equipes: new Map(), coachees: new Set(), miennes: new Set(),
-                evenements: [], convocations: [], resumes: new Map(), clubs: new Map() };
+                evenements: [], convocations: [], resumes: new Map(), clubs: new Map(), covoit: new Map() };
 
     // ---------- Outils ----------
     function toast(t) { const n = $('toast'); n.textContent = t; n.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => n.hidden = true, 3200); }
@@ -458,7 +471,7 @@
         for (const q of eqs || []) E.equipes.set(q.id, q);
       }
 
-      E.evenements = []; E.convocations = []; E.resumes = new Map();
+      E.evenements = []; E.convocations = []; E.resumes = new Map(); E.covoit = new Map();
       if (idsEq.length) {
         const depuis = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
         const jusqua = new Date(Date.now() + 28 * 86400 * 1000).toISOString();
@@ -483,6 +496,7 @@
           }
           E.resumes.set(id, lignes);
         }));
+        await chargerCovoit();
       }
       afficher();
     }
@@ -611,6 +625,148 @@
       });
     }
 
+    // ---------- Covoiturage (matchs et tournois) ----------
+    const covoitPossible = (evt) => estMatch(evt) && evt.etat !== 'annule' && new Date(evt.debut) > new Date();
+    async function chargerCovoit(ids) {
+      const evs = ids || E.evenements.filter(covoitPossible).map(e => e.id);
+      if (!evs.length) return;
+      const { data, error } = await sb.rpc('covoiturage_evenements', { evs });
+      if (error) return;
+      for (const id of evs) E.covoit.set(id, []);
+      for (const r of data || []) E.covoit.get(r.evenement_id).push(r);
+    }
+    const estMien = (pid) => E.personnes.has(pid);
+    // Personnes de ma famille convoquées à l'événement, pour qui je peux réserver
+    const mesConvoques = (evt) => E.convocations.filter(c => c.evenement_id === evt.id && E.repondPour.has(c.personne_id) && c.reponse !== 'absent')
+      .map(c => E.personnes.get(c.personne_id)).filter(Boolean);
+    // Adulte de la famille qui peut proposer sa voiture
+    const conducteurs = () => E.fiches.filter(p => age(p) === null || age(p) >= 18);
+    const placeDe = (evt, pid) => (E.covoit.get(evt.id) || []).find(o => o.sens === 'propose' && o.passagers.some(x => x.personne_id === pid));
+    const telLien = (t) => t ? el('a', { href: 'tel:' + t.replace(/\s/g, '') }, t) : null;
+
+    function blocCovoit(evt) {
+      if (!covoitPossible(evt)) return null;
+      const liste = E.covoit.get(evt.id) || [];
+      const offres = liste.filter(o => o.sens === 'propose'), demandes = liste.filter(o => o.sens === 'cherche');
+      const libres = offres.reduce((n, o) => n + Math.max(0, o.places - o.passagers.length), 0);
+      const mes = mesConvoques(evt).map(p => { const o = placeDe(evt, p.id); return o ? p.prenom + ' monte avec ' + o.auteur : null; }).filter(Boolean);
+      const mienne = offres.find(o => estMien(o.auteur_id));
+      const texte = el('div', { class: 'texte' },
+        el('strong', {}, 'Covoiturage : '),
+        offres.length ? libres + ' place' + (libres > 1 ? 's' : '') + ' libre' + (libres > 1 ? 's' : '') + ' dans ' + offres.length + ' voiture' + (offres.length > 1 ? 's' : '') : 'aucune voiture proposée',
+        demandes.length ? ' · ' + demandes.length + ' demande' + (demandes.length > 1 ? 's' : '') : '',
+        mienne ? ' · vous conduisez (' + mienne.passagers.length + '/' + mienne.places + ')' : '',
+        mes.length ? el('div', {}, mes.join(' ; ')) : null);
+      return el('div', { class: 'covoit' }, texte, el('button', { class: 'mini', onclick: () => ouvrirCovoit(evt) }, 'Covoiturage'));
+    }
+
+    async function actionCovoit(evt, promesse, message) {
+      const { error } = await promesse;
+      if (error) { toast('Erreur : ' + (error.message || error)); return false; }
+      await chargerCovoit([evt.id]);
+      toast(message); afficher(); ouvrirCovoit(evt);
+      return true;
+    }
+
+    function ouvrirCovoit(evt) {
+      const liste = E.covoit.get(evt.id) || [];
+      const offres = liste.filter(o => o.sens === 'propose'), demandes = liste.filter(o => o.sens === 'cherche');
+      const famille = mesConvoques(evt);
+      const sansPlace = famille.filter(p => !placeDe(evt, p.id));
+      ouvrirFenetre('Covoiturage - ' + titre(evt), (f) => {
+        f.append(el('p', { class: 'petit' }, jourDe(evt.debut) + (sansHeure(evt) ? '' : ', ' + heure(evt.debut)) + (evt.lieu ? ' - ' + evt.lieu : '') + '. Le téléphone du conducteur apparaît dès qu\'une place est réservée.'));
+        f.append(el('div', { class: 'se-groupe' }, 'Voitures proposées (' + offres.length + ')'));
+        if (!offres.length) f.append(el('p', { class: 'petit' }, 'Aucune voiture proposée pour le moment.'));
+        for (const o of offres) {
+          const libres = o.places - o.passagers.length;
+          const moi = estMien(o.auteur_id);
+          const b = el('div', { class: 'cv-bloc' },
+            el('div', { class: 'cv-titre' }, el('span', {}, 'Voiture de ' + o.auteur, o.telephone ? ' · ' : '', telLien(o.telephone)),
+              el('span', { class: libres > 0 ? 'libre' : 'plein' }, libres > 0 ? libres + ' place' + (libres > 1 ? 's' : '') + ' libre' + (libres > 1 ? 's' : '') : 'complet')),
+            (o.depart || o.heure) ? el('div', { class: 'cv-info' }, 'Départ' + (o.depart ? ' : ' + o.depart : '') + (o.heure ? ', ' + heure(o.heure) : '')) : null,
+            o.commentaire ? el('div', { class: 'cv-info' }, o.commentaire) : null);
+          for (const x of o.passagers) {
+            const retirable = moi || estMien(x.personne_id);
+            b.append(el('div', { class: 'cv-passager' }, el('span', {}, x.nom, x.telephone ? ' · ' : '', telLien(x.telephone)),
+              retirable ? el('button', { class: 'mini danger', onclick: () => {
+                if (!confirm((estMien(x.personne_id) ? 'Libérer la place de ' : 'Retirer ') + x.nom + ' ?')) return;
+                actionCovoit(evt, sb.from('covoiturage_passagers').delete().eq('offre_id', o.id).eq('personne_id', x.personne_id), 'Place libérée.');
+              } }, estMien(x.personne_id) ? 'Libérer' : 'Retirer') : null));
+          }
+          const actions = el('div', { class: 'cv-actions' });
+          if (!moi && libres > 0) for (const p of sansPlace)
+            actions.append(el('button', { class: 'mini principal', onclick: () =>
+              actionCovoit(evt, sb.from('covoiturage_passagers').insert({ offre_id: o.id, personne_id: p.id }), 'Place réservée pour ' + p.prenom + '. Le conducteur est prévenu.') }, 'Réserver pour ' + p.prenom));
+          if (moi) {
+            actions.append(el('button', { class: 'mini', onclick: () => formulaireOffre(evt, o) }, 'Modifier'));
+            actions.append(el('button', { class: 'mini danger', onclick: () => {
+              if (!confirm('Supprimer votre proposition ?' + (o.passagers.length ? ' Les familles des passagers seront prévenues.' : ''))) return;
+              actionCovoit(evt, sb.from('covoiturage').delete().eq('id', o.id), 'Proposition supprimée.');
+            } }, 'Supprimer'));
+          }
+          if (actions.childNodes.length) b.append(actions);
+          f.append(b);
+        }
+        f.append(el('div', { class: 'se-groupe' }, 'Places recherchées (' + demandes.length + ')'));
+        if (!demandes.length) f.append(el('p', { class: 'petit' }, 'Aucune demande.'));
+        for (const d of demandes) {
+          const moi = estMien(d.auteur_id);
+          f.append(el('div', { class: 'cv-bloc' },
+            el('div', { class: 'cv-titre' }, el('span', {}, d.auteur + ' cherche une place', d.telephone ? ' · ' : '', telLien(d.telephone))),
+            d.depart ? el('div', { class: 'cv-info' }, 'Depuis : ' + d.depart) : null,
+            d.commentaire ? el('div', { class: 'cv-info' }, d.commentaire) : null,
+            moi ? el('div', { class: 'cv-actions' }, el('button', { class: 'mini danger', onclick: () =>
+              actionCovoit(evt, sb.from('covoiturage').delete().eq('id', d.id), 'Demande retirée.') }, 'Retirer la demande')) : null));
+        }
+        const boutons = el('div', { class: 'boutons', style: 'flex-wrap:wrap' });
+        if (conducteurs().length && !offres.some(o => estMien(o.auteur_id)))
+          boutons.append(el('button', { class: 'btn principal', onclick: () => formulaireOffre(evt, null) }, 'Je propose des places'));
+        const aChercher = sansPlace.filter(p => !demandes.some(d => d.auteur_id === p.id));
+        if (aChercher.length) boutons.append(el('button', { class: 'btn secondaire', onclick: () => formulaireDemande(evt, aChercher) }, 'Je cherche une place'));
+        boutons.append(el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'));
+        f.append(boutons);
+      });
+    }
+
+    function heureVersDate(evt, hhmm) {
+      return hhmm ? new Date(cleJour(evt.debut) + 'T' + hhmm).toISOString() : null;
+    }
+    function formulaireOffre(evt, o) {
+      const qui = conducteurs();
+      ouvrirFenetre(o ? 'Modifier ma proposition' : 'Je propose des places', (f) => {
+        const selQui = qui.length > 1 ? el('select', { class: 'champ' }, qui.map(p => el('option', { value: p.id }, p.prenom + ' ' + p.nom))) : null;
+        const places = el('select', { class: 'champ' }, [1, 2, 3, 4, 5, 6, 7, 8].map(n => el('option', { value: n, selected: (o ? o.places : 3) === n }, n + ' place' + (n > 1 ? 's' : '') + ' pour des joueurs')));
+        const depart = el('input', { class: 'champ', placeholder: 'Lieu de départ (ex. parking du stade de Gouesnou)', maxlength: 120, value: o ? o.depart || '' : '' });
+        const hDef = o && o.heure ? fmtHeure.format(new Date(o.heure)) : '';
+        const h = el('input', { class: 'champ', type: 'time', value: hDef });
+        const com = el('input', { class: 'champ', placeholder: 'Commentaire (facultatif)', maxlength: 200, value: o ? o.commentaire || '' : '' });
+        f.append(el('p', { class: 'petit' }, 'Votre nom et vos places sont visibles par l\'équipe ; votre téléphone seulement par les familles des passagers et les coachs.'),
+          selQui, places, depart, el('label', { class: 'petit' }, 'Heure de départ (facultatif)'), h, com,
+          el('div', { class: 'boutons' },
+            el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Retour'),
+            el('button', { class: 'btn principal', onclick: () => {
+              const ligne = { places: +places.value, depart: depart.value.trim() || null, heure: heureVersDate(evt, h.value), commentaire: com.value.trim() || null };
+              const req = o ? sb.from('covoiturage').update(ligne).eq('id', o.id)
+                : sb.from('covoiturage').insert({ ...ligne, evenement_id: evt.id, sens: 'propose', personne_id: selQui ? selQui.value : qui[0].id });
+              actionCovoit(evt, req, o ? 'Proposition modifiée.' : 'Merci ! Votre proposition est visible par l\'équipe.');
+            } }, 'Enregistrer')));
+      });
+    }
+    function formulaireDemande(evt, personnes) {
+      ouvrirFenetre('Je cherche une place', (f) => {
+        const selQui = el('select', { class: 'champ' }, personnes.map(p => el('option', { value: p.id }, p.prenom + ' ' + p.nom)));
+        const depart = el('input', { class: 'champ', placeholder: 'Depuis (ex. Gouesnou, Guipavas)', maxlength: 120 });
+        const com = el('input', { class: 'champ', placeholder: 'Commentaire (facultatif)', maxlength: 200 });
+        f.append(el('p', { class: 'petit' }, 'La demande est visible par l\'équipe ; votre téléphone seulement par les conducteurs de ce match et les coachs.'),
+          selQui, depart, com,
+          el('div', { class: 'boutons' },
+            el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Retour'),
+            el('button', { class: 'btn principal', onclick: () =>
+              actionCovoit(evt, sb.from('covoiturage').insert({ evenement_id: evt.id, sens: 'cherche', personne_id: selQui.value, places: 1,
+                depart: depart.value.trim() || null, commentaire: com.value.trim() || null }), 'Demande enregistrée.') }, 'Enregistrer')));
+      });
+    }
+
     function carteEvenement(evt, avecReponses) {
       const c = el('div', { class: 'evt' + (evt.etat === 'annule' ? ' annule' : '') },
         el('div', { class: 'evt-tete' }, el('div', { class: 'evt-titre' }, titre(evt)), ...pastilles(evt)),
@@ -618,6 +774,7 @@
         evt.consignes ? el('div', { class: 'consignes' }, evt.consignes) : null);
       if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) c.append(blocReponse(evt, cv));
       const cpt = compteur(evt); if (cpt) c.append(cpt);
+      const cv = blocCovoit(evt); if (cv) c.append(cv);
       return c;
     }
 
