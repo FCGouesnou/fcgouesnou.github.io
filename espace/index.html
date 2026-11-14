@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.12 - 14/11/2026 - covoiturage : le coach désigne un conducteur, qui accepte ou refuse
+  Version : 0.12.1 - 14/11/2026 - désignation : liste « Nom Prénom » par ordre alphabétique, coach et parent distingués
+           0.12 - 14/11/2026 - covoiturage : le coach désigne un conducteur, qui accepte ou refuse
            0.11.3 - 14/11/2026 - places de covoiturage : « places libres pour d'autres joueurs », sans compter son enfant
            0.11.2 - 14/11/2026 - nombre de places à choisir (plus de valeur par défaut)
            0.11.1 - 14/11/2026 - « null » retiré du formulaire de proposition de places
@@ -273,7 +274,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.12 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.12.1 - pilote</p>
     </main>
   </div>
 
@@ -299,7 +300,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.12 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.12.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -753,7 +754,7 @@
     async function formulaireDesignation(evt) {
       const { data, error } = await sb.rpc('covoit_candidats', { ev: evt.id });
       if (error) { toast('Erreur : ' + error.message); return; }
-      const liste = (data || []).filter(c => !c.deja);
+      const liste = (data || []).filter(c => !c.deja).sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
       ouvrirFenetre('Désigner un conducteur', (f) => {
         if (!liste.length) {
           f.append(el('p', { class: 'petit' }, 'Aucune personne disponible : les parents des joueurs convoqués et les coachs proposent déjà leur voiture, ou aucun parent n\'est rattaché.'),
@@ -761,7 +762,7 @@
           return;
         }
         const qui = el('select', { class: 'champ' }, el('option', { value: '' }, 'Qui conduit ?'),
-          liste.map(c => el('option', { value: c.personne_id }, c.nom + (c.pour === 'coach' ? ' (coach)' : ' (parent de ' + c.pour + ')'))));
+          liste.map(c => el('option', { value: c.personne_id }, c.nom + ' (' + [c.coach ? 'coach' : null, c.pour ? 'parent de ' + c.pour : null].filter(Boolean).join(', ') + ')')));
         const places = el('select', { class: 'champ' }, el('option', { value: '' }, 'Places libres pour d\'autres joueurs ?'),
           [1, 2, 3, 4, 5, 6, 7, 8].map(n => el('option', { value: n }, n + ' place' + (n > 1 ? 's' : '') + ' libre' + (n > 1 ? 's' : ''))));
         const depart = el('input', { class: 'champ', placeholder: 'Lieu de départ (facultatif)', maxlength: 120 });
