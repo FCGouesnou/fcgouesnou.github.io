@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.13 - 14/11/2026 - onglet « Frais des coachs » (administrateurs) : trajets à valider, véhicules, relevé à date
+  Version : 0.13.1 - 14/11/2026 - désignation : liste par joueur (nom du joueur, parents dessous), puis coachs
+           0.13 - 14/11/2026 - onglet « Frais des coachs » (administrateurs) : trajets à valider, véhicules, relevé à date
            0.12.1 - 14/11/2026 - désignation : liste « Nom Prénom » par ordre alphabétique, coach et parent distingués
            0.12 - 14/11/2026 - covoiturage : le coach désigne un conducteur, qui accepte ou refuse
            0.11.3 - 14/11/2026 - places de covoiturage : « places libres pour d'autres joueurs », sans compter son enfant
@@ -284,7 +285,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.13 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.13.1 - pilote</p>
     </main>
   </div>
 
@@ -312,7 +313,7 @@
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.13 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.13.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -771,15 +772,22 @@
     async function formulaireDesignation(evt) {
       const { data, error } = await sb.rpc('covoit_candidats', { ev: evt.id });
       if (error) { toast('Erreur : ' + error.message); return; }
-      const liste = (data || []).filter(c => !c.deja).sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+      const liste = data || [];
+      const cmp = (a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' });
+      // Un groupe par joueur (ses parents dessous), puis les coachs et dirigeants
+      const parJoueur = new Map();
+      for (const c of liste.filter(x => x.joueur)) { if (!parJoueur.has(c.joueur)) parJoueur.set(c.joueur, []); parJoueur.get(c.joueur).push(c); }
+      const coachsListe = liste.filter(x => x.coach && !x.joueur);
+      const opt = (c) => el('option', { value: c.personne_id, disabled: c.deja }, c.nom + (c.deja ? ' - conduit déjà' : ''));
       ouvrirFenetre('Désigner un conducteur', (f) => {
-        if (!liste.length) {
+        if (!liste.some(c => !c.deja)) {
           f.append(el('p', { class: 'petit' }, 'Aucune personne disponible : les parents des joueurs convoqués et les coachs proposent déjà leur voiture, ou aucun parent n\'est rattaché.'),
             el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Retour')));
           return;
         }
         const qui = el('select', { class: 'champ' }, el('option', { value: '' }, 'Qui conduit ?'),
-          liste.map(c => el('option', { value: c.personne_id }, c.nom + ' (' + [c.coach ? 'coach' : null, c.pour ? 'parent de ' + c.pour : null].filter(Boolean).join(', ') + ')')));
+          [...parJoueur.keys()].sort(cmp).map(j => el('optgroup', { label: j }, parJoueur.get(j).sort((a, b) => cmp(a.nom, b.nom)).map(opt))),
+          coachsListe.length ? el('optgroup', { label: 'Coachs et dirigeants' }, coachsListe.sort((a, b) => cmp(a.nom, b.nom)).map(opt)) : null);
         const places = el('select', { class: 'champ' }, el('option', { value: '' }, 'Places libres pour d\'autres joueurs ?'),
           [1, 2, 3, 4, 5, 6, 7, 8].map(n => el('option', { value: n }, n + ' place' + (n > 1 ? 's' : '') + ' libre' + (n > 1 ? 's' : ''))));
         const depart = el('input', { class: 'champ', placeholder: 'Lieu de départ (facultatif)', maxlength: 120 });
