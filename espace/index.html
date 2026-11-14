@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.11.3 - 14/11/2026 - places de covoiturage : « places libres pour d'autres joueurs », sans compter son enfant
+  Version : 0.12 - 14/11/2026 - covoiturage : le coach désigne un conducteur, qui accepte ou refuse
+           0.11.3 - 14/11/2026 - places de covoiturage : « places libres pour d'autres joueurs », sans compter son enfant
            0.11.2 - 14/11/2026 - nombre de places à choisir (plus de valeur par défaut)
            0.11.1 - 14/11/2026 - « null » retiré du formulaire de proposition de places
            0.11 - 14/11/2026 - covoiturage des matchs et tournois : proposer des places, chercher une place,
@@ -272,7 +273,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.11.3 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.12 - pilote</p>
     </main>
   </div>
 
@@ -298,7 +299,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.11.3 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.12 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -325,7 +326,7 @@
     // Pendant un aperçu, toute écriture est refusée côté écran et les fonctions qui dépendent
     // de la personne connectée renvoient les valeurs calculées pour la personne observée.
     const AP = { actif: null, suisAdmin: false };
-    const RPC_LECTURE = new Set(['covoiturage_evenements', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord']);
+    const RPC_LECTURE = new Set(['covoiturage_evenements', 'covoit_candidats', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord']);
     const MSG_APERCU = 'Aperçu en lecture seule : aucune modification n\'est enregistrée.';
     function refus() {
       const r = { data: null, error: { message: MSG_APERCU } };
@@ -654,11 +655,13 @@
       const libres = offres.reduce((n, o) => n + Math.max(0, o.places - o.passagers.length), 0);
       const mes = mesConvoques(evt).map(p => { const o = placeDe(evt, p.id); return o ? p.prenom + ' monte avec ' + o.auteur : null; }).filter(Boolean);
       const mienne = offres.find(o => estMien(o.auteur_id));
+      const aRepondre = mienne && mienne.designation === 'en_attente';
       const texte = el('div', { class: 'texte' },
         el('strong', {}, 'Covoiturage : '),
         offres.length ? libres + ' place' + (libres > 1 ? 's' : '') + ' libre' + (libres > 1 ? 's' : '') + ' dans ' + offres.length + ' voiture' + (offres.length > 1 ? 's' : '') : 'aucune voiture proposée',
         demandes.length ? ' · ' + demandes.length + ' demande' + (demandes.length > 1 ? 's' : '') : '',
-        mienne ? ' · vous conduisez (' + mienne.passagers.length + '/' + mienne.places + ')' : '',
+        aRepondre ? el('div', { style: 'color:var(--orange);font-weight:600' }, 'Le coach vous désigne conducteur : réponse attendue')
+          : mienne ? ' · vous conduisez (' + mienne.passagers.length + '/' + mienne.places + ')' : '',
         mes.length ? el('div', {}, mes.join(' ; ')) : null);
       return el('div', { class: 'covoit' }, texte, el('button', { class: 'mini', onclick: () => ouvrirCovoit(evt) }, 'Covoiturage'));
     }
@@ -687,7 +690,9 @@
             el('div', { class: 'cv-titre' }, el('span', {}, 'Voiture de ' + o.auteur, o.telephone ? ' · ' : '', telLien(o.telephone)),
               el('span', { class: libres > 0 ? 'libre' : 'plein' }, libres > 0 ? libres + ' place' + (libres > 1 ? 's' : '') + ' libre' + (libres > 1 ? 's' : '') : 'complet')),
             (o.depart || o.heure) ? el('div', { class: 'cv-info' }, 'Départ' + (o.depart ? ' : ' + o.depart : '') + (o.heure ? ', ' + heure(o.heure) : '')) : null,
-            o.commentaire ? el('div', { class: 'cv-info' }, o.commentaire) : null);
+            o.commentaire ? el('div', { class: 'cv-info' }, o.commentaire) : null,
+            o.designe_par ? el('div', { class: 'cv-info', style: o.designation === 'en_attente' ? 'color:var(--orange)' : '' },
+              'Désigné par ' + o.designe_par + (o.designation === 'en_attente' ? ' - réponse attendue' : ' - accepté')) : null);
           for (const x of o.passagers) {
             const retirable = moi || estMien(x.personne_id);
             b.append(el('div', { class: 'cv-passager' }, el('span', {}, x.nom, x.telephone ? ' · ' : '', telLien(x.telephone)),
@@ -697,10 +702,22 @@
               } }, estMien(x.personne_id) ? 'Libérer' : 'Retirer') : null));
           }
           const actions = el('div', { class: 'cv-actions' });
-          if (!moi && libres > 0) for (const p of sansPlace)
+          const enAttente = o.designation === 'en_attente';
+          if (enAttente && E.fiches.some(p => p.id === o.auteur_id)) {
+            actions.append(el('button', { class: 'mini principal', onclick: () =>
+              actionCovoit(evt, sb.rpc('covoit_repondre', { p_offre: o.id, p_accepte: true }), 'Merci ! Le coach est prévenu.') }, 'Accepter'));
+            actions.append(el('button', { class: 'mini danger', onclick: () => {
+              if (!confirm('Refuser de conduire pour ce match ? Le coach sera prévenu.')) return;
+              actionCovoit(evt, sb.rpc('covoit_repondre', { p_offre: o.id, p_accepte: false }), 'Refus envoyé au coach.');
+            } }, 'Refuser'));
+          } else if (enAttente && E.coachees.has(evt.equipe_id)) {
+            actions.append(el('button', { class: 'mini danger', onclick: () =>
+              actionCovoit(evt, sb.rpc('covoit_annuler_designation', { p_offre: o.id }), 'Désignation retirée.') }, 'Retirer la désignation'));
+          }
+          if (!moi && libres > 0 && !enAttente) for (const p of sansPlace)
             actions.append(el('button', { class: 'mini principal', onclick: () =>
               actionCovoit(evt, sb.from('covoiturage_passagers').insert({ offre_id: o.id, personne_id: p.id }), 'Place réservée pour ' + p.prenom + '. Le conducteur est prévenu.') }, 'Réserver pour ' + p.prenom));
-          if (moi) {
+          if (moi && !enAttente) {
             actions.append(el('button', { class: 'mini', onclick: () => formulaireOffre(evt, o) }, 'Modifier'));
             actions.append(el('button', { class: 'mini danger', onclick: () => {
               if (!confirm('Supprimer votre proposition ?' + (o.passagers.length ? ' Les familles des passagers seront prévenues.' : ''))) return;
@@ -724,10 +741,39 @@
         const boutons = el('div', { class: 'boutons', style: 'flex-wrap:wrap' });
         if (conducteurs().length && !offres.some(o => estMien(o.auteur_id)))
           boutons.append(el('button', { class: 'btn principal', onclick: () => formulaireOffre(evt, null) }, 'Je propose des places'));
+        if (E.coachees.has(evt.equipe_id))
+          boutons.append(el('button', { class: 'btn secondaire', onclick: () => formulaireDesignation(evt) }, 'Désigner un conducteur (coach)'));
         const aChercher = sansPlace.filter(p => !demandes.some(d => d.auteur_id === p.id));
         if (aChercher.length) boutons.append(el('button', { class: 'btn secondaire', onclick: () => formulaireDemande(evt, aChercher) }, 'Je cherche une place'));
         boutons.append(el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'));
         f.append(boutons);
+      });
+    }
+
+    async function formulaireDesignation(evt) {
+      const { data, error } = await sb.rpc('covoit_candidats', { ev: evt.id });
+      if (error) { toast('Erreur : ' + error.message); return; }
+      const liste = (data || []).filter(c => !c.deja);
+      ouvrirFenetre('Désigner un conducteur', (f) => {
+        if (!liste.length) {
+          f.append(el('p', { class: 'petit' }, 'Aucune personne disponible : les parents des joueurs convoqués et les coachs proposent déjà leur voiture, ou aucun parent n\'est rattaché.'),
+            el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Retour')));
+          return;
+        }
+        const qui = el('select', { class: 'champ' }, el('option', { value: '' }, 'Qui conduit ?'),
+          liste.map(c => el('option', { value: c.personne_id }, c.nom + (c.pour === 'coach' ? ' (coach)' : ' (parent de ' + c.pour + ')'))));
+        const places = el('select', { class: 'champ' }, el('option', { value: '' }, 'Places libres pour d\'autres joueurs ?'),
+          [1, 2, 3, 4, 5, 6, 7, 8].map(n => el('option', { value: n }, n + ' place' + (n > 1 ? 's' : '') + ' libre' + (n > 1 ? 's' : ''))));
+        const depart = el('input', { class: 'champ', placeholder: 'Lieu de départ (facultatif)', maxlength: 120 });
+        f.append(el('p', { class: 'petit' }, 'La personne reçoit une notification et accepte ou refuse ; vous êtes prévenu de sa réponse. Les familles ne peuvent réserver qu\'une fois la désignation acceptée.'),
+          qui, places, depart,
+          el('div', { class: 'boutons' },
+            el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Retour'),
+            el('button', { class: 'btn principal', onclick: () => {
+              if (!qui.value || !places.value) { toast('Choisissez la personne et le nombre de places.'); return; }
+              actionCovoit(evt, sb.rpc('covoit_designer', { ev: evt.id, p_personne: qui.value, p_places: +places.value, p_depart: depart.value.trim() || null }),
+                'Demande envoyée.');
+            } }, 'Désigner')));
       });
     }
 
