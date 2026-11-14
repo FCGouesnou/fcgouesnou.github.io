@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.11.2 - 14/11/2026 - nombre de places à choisir (plus de valeur par défaut)
+  Version : 0.11.3 - 14/11/2026 - places de covoiturage : « places libres pour d'autres joueurs », sans compter son enfant
+           0.11.2 - 14/11/2026 - nombre de places à choisir (plus de valeur par défaut)
            0.11.1 - 14/11/2026 - « null » retiré du formulaire de proposition de places
            0.11 - 14/11/2026 - covoiturage des matchs et tournois : proposer des places, chercher une place,
            réserver ou libérer une place pour son enfant ; téléphones visibles entre les personnes concernées
@@ -271,7 +272,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.11.2 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.11.3 - pilote</p>
     </main>
   </div>
 
@@ -297,7 +298,7 @@
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.11.2 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.11.3 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -737,14 +738,16 @@
       const qui = conducteurs();
       ouvrirFenetre(o ? 'Modifier ma proposition' : 'Je propose des places', (f) => {
         const selQui = qui.length > 1 ? el('select', { class: 'champ' }, qui.map(p => el('option', { value: p.id }, p.prenom + ' ' + p.nom))) : null;
-        const places = el('select', { class: 'champ' }, o ? null : el('option', { value: '', selected: true }, 'Nombre de places pour des joueurs ?'),
-          [1, 2, 3, 4, 5, 6, 7, 8].map(n => el('option', { value: n, selected: o ? o.places === n : false }, n + ' place' + (n > 1 ? 's' : '') + ' pour des joueurs')));
+        const places = el('select', { class: 'champ' }, o ? null : el('option', { value: '', selected: true }, 'Places libres pour d\'autres joueurs ?'),
+          [1, 2, 3, 4, 5, 6, 7, 8].map(n => el('option', { value: n, selected: o ? o.places === n : false }, n + ' place' + (n > 1 ? 's' : '') + ' libre' + (n > 1 ? 's' : '') + ' pour d\'autres joueurs')));
         const depart = el('input', { class: 'champ', placeholder: 'Lieu de départ (ex. parking du stade de Gouesnou)', maxlength: 120, value: o ? o.depart || '' : '' });
         const hDef = o && o.heure ? fmtHeure.format(new Date(o.heure)) : '';
         const h = el('input', { class: 'champ', type: 'time', value: hDef });
         const com = el('input', { class: 'champ', placeholder: 'Commentaire (facultatif)', maxlength: 200, value: o ? o.commentaire || '' : '' });
         f.append(el('p', { class: 'petit' }, 'Votre nom et vos places sont visibles par l\'équipe ; votre téléphone seulement par les familles des passagers et les coachs.'),
-          ...(selQui ? [selQui] : []), places, depart, el('label', { class: 'petit' }, 'Heure de départ (facultatif)'), h, com,
+          ...(selQui ? [selQui] : []), places,
+          el('p', { class: 'petit', style: 'margin:-6px 0 12px' }, 'Sans compter votre enfant : indiquez seulement les places que d\'autres joueurs peuvent réserver.'),
+          depart, el('label', { class: 'petit' }, 'Heure de départ (facultatif)'), h, com,
           el('div', { class: 'boutons' },
             el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Retour'),
             el('button', { class: 'btn principal', onclick: () => {
