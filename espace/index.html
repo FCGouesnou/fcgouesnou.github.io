@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.12.1 - 14/11/2026 - désignation : liste « Nom Prénom » par ordre alphabétique, coach et parent distingués
+  Version : 0.13 - 14/11/2026 - onglet « Frais des coachs » (administrateurs) : trajets à valider, véhicules, relevé à date
+           0.12.1 - 14/11/2026 - désignation : liste « Nom Prénom » par ordre alphabétique, coach et parent distingués
            0.12 - 14/11/2026 - covoiturage : le coach désigne un conducteur, qui accepte ou refuse
            0.11.3 - 14/11/2026 - places de covoiturage : « places libres pour d'autres joueurs », sans compter son enfant
            0.11.2 - 14/11/2026 - nombre de places à choisir (plus de valeur par défaut)
@@ -230,6 +231,15 @@
     .cv-bloc .cv-passager { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 4px 0 0 12px; }
     .cv-bloc .cv-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     .cv-bloc a { color: var(--bleu); }
+    .fr-periode { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: .85rem; }
+    .fr-periode input { border: 1px solid #cfd6e4; border-radius: 8px; padding: 8px; }
+    .fr-ligne { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.05); font-size: .88rem; }
+    .fr-ligne .fr-tete { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-weight: 600; }
+    .fr-ligne .fr-info { color: var(--gris); margin-top: 3px; }
+    .fr-ligne .fr-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .fr-ligne input.km { width: 90px; border: 1px solid #cfd6e4; border-radius: 8px; padding: 7px; }
+    .fr-ligne select { border: 1px solid #cfd6e4; border-radius: 8px; padding: 7px; background: #fff; }
+    .fr-total { font-weight: 600; margin: 10px 0; }
     .flottant { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); background: var(--bleu); color: #fff; border: 0; border-radius: 28px; padding: 14px 20px; font-weight: 600; box-shadow: 0 6px 18px rgba(26,58,143,.35); cursor: pointer; }
 
     /* Fenêtre */
@@ -274,7 +284,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.12.1 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.13 - pilote</p>
     </main>
   </div>
 
@@ -296,11 +306,13 @@
         <button class="onglet actif" data-vue="avenir">À venir</button>
         <button class="onglet" data-vue="coach" hidden>Mes équipes</button>
         <button class="onglet" data-vue="partenaires" hidden>Partenaires</button>
+        <button class="onglet" data-vue="frais" hidden>Frais des coachs</button>
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.12.1 - pilote</p>
+      <div id="vueFrais" hidden></div>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.13 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -520,11 +532,15 @@
       $('bonjour').textContent = moi ? 'Bonjour ' + moi.prenom + '.' : 'Bonjour.';
       const coach = E.coachees.size > 0;
       document.querySelector('.onglet[data-vue="coach"]').hidden = !coach;
-      $('onglets').hidden = !coach && !partenairesOk;
+      const fraisOk = AP.suisAdmin && !AP.actif;
+      document.querySelector('.onglet[data-vue="frais"]').hidden = !fraisOk;
+      if (vue === 'frais' && !fraisOk) vue = 'avenir';
+      $('onglets').hidden = !coach && !partenairesOk && !fraisOk;
       $('btnNouvel').hidden = !coach || vue !== 'coach';
       $('vueAvenir').hidden = vue !== 'avenir';
       $('vueCoach').hidden = vue !== 'coach';
       $('vuePartenaires').hidden = vue !== 'partenaires';
+      $('vueFrais').hidden = vue !== 'frais';
       afficherAvenir();
       if (coach) afficherCoach();
     }
@@ -533,6 +549,7 @@
       document.querySelectorAll('#onglets .onglet').forEach(x => x.classList.toggle('actif', x === b));
       afficher();
       if (vue === 'partenaires' && P) P.afficher($('vuePartenaires'));
+      if (vue === 'frais') afficherFrais();
     });
 
     function pastilles(evt) {
@@ -1299,6 +1316,153 @@
       AP.suisAdmin = (data || []).some(r => r.role === 'admin');
       $('btnApercu').hidden = !AP.suisAdmin;
       majCarteSportEasy();
+      afficher();
+    }
+
+    // ---------- Frais des coachs (administrateurs) ----------
+    // Trajets des coachs et dirigeants validés par un administrateur, kilomètres aller-retour depuis
+    // le point de départ du club (calcul IGN), véhicule relevé sur la carte grise, montant au barème officiel.
+    // Point d'étape à tout moment ; le Cerfa viendra après la délibération du CODIR.
+    const FR = { sous: 'trajets', depuis: null, jusqua: null };
+    const isoJour = (d) => cleJour(d);
+    function debutSaison() { const d = new Date(); const a = d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1; return a + '-07-01'; }
+    const euros = (n) => n == null ? '-' : Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+    const kmTxt = (n) => n == null ? '-' : Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' km';
+    const LIB_CV = (cv, el) => cv == null ? 'véhicule à renseigner' : (cv <= 3 ? '3 CV et moins' : cv >= 7 ? '7 CV et plus' : cv + ' CV') + (el ? ', électrique' : '');
+
+    async function afficherFrais() {
+      const z = $('vueFrais'); z.replaceChildren();
+      if (!AP.suisAdmin || AP.actif) return;
+      FR.depuis = FR.depuis || debutSaison(); FR.jusqua = FR.jusqua || isoJour(new Date());
+      const sous = el('div', { class: 'p-onglets' }, [['trajets', 'Trajets à valider'], ['vehicules', 'Véhicules'], ['releve', 'Relevé à date']].map(([k, t]) =>
+        el('button', { class: 'onglet' + (FR.sous === k ? ' actif' : ''), onclick: () => { FR.sous = k; afficherFrais(); } }, t)));
+      const d1 = el('input', { type: 'date', value: FR.depuis }), d2 = el('input', { type: 'date', value: FR.jusqua });
+      const periode = el('div', { class: 'fr-periode' }, 'Du', d1, 'au', d2,
+        el('button', { class: 'mini', onclick: () => { FR.depuis = d1.value || debutSaison(); FR.jusqua = d2.value || isoJour(new Date()); afficherFrais(); } }, 'Afficher'));
+      z.append(el('p', { class: 'petit' }, 'Réservé aux administrateurs. Frais de déplacement des coachs et dirigeants, en vue d\'un abandon de frais (Cerfa 11580*05, après délibération du CODIR).'), sous);
+      const corps = el('div', {}); z.append(...(FR.sous === 'vehicules' ? [] : [periode]), corps);
+      corps.append(el('p', { class: 'vide' }, 'Chargement…'));
+      try {
+        if (FR.sous === 'trajets') await fraisTrajets(corps);
+        else if (FR.sous === 'vehicules') await fraisVehicules(corps);
+        else await fraisReleve(corps);
+      } catch (e) { corps.replaceChildren(el('p', { class: 'erreur' }, 'Erreur : ' + (e.message || e))); }
+    }
+
+    async function fraisTrajets(corps) {
+      let { data, error } = await sbReel.rpc('frais_trajets', { p_depuis: FR.depuis, p_jusqua: FR.jusqua });
+      if (error) throw error;
+      // Kilomètres calculés une fois pour toutes (IGN) pour les trajets qui n'en ont pas encore
+      const aCalculer = (data || []).filter(t => t.km_auto == null && t.trajet_valide == null).map(t => t.id);
+      if (aCalculer.length) {
+        await sbReel.functions.invoke('distance-trajets', { body: { ids: aCalculer } });
+        ({ data } = await sbReel.rpc('frais_trajets', { p_depuis: FR.depuis, p_jusqua: FR.jusqua }));
+      }
+      corps.replaceChildren();
+      const liste = data || [];
+      const groupes = [['À valider', liste.filter(t => t.trajet_valide == null)], ['Validés', liste.filter(t => t.trajet_valide === true)], ['Non effectués', liste.filter(t => t.trajet_valide === false)]];
+      corps.append(el('div', { class: 'boutons', style: 'margin-bottom:10px' }, el('button', { class: 'btn secondaire', onclick: ajouterTrajet }, 'Ajouter un trajet oublié')));
+      for (const [titreG, l] of groupes) {
+        corps.append(el('div', { class: 'se-groupe' }, titreG + ' (' + l.length + ')'));
+        if (!l.length) { corps.append(el('p', { class: 'petit' }, titreG === 'À valider' ? 'Aucun trajet de coach à valider sur la période. Les trajets viennent des voitures proposées par les coachs (ou désignées) dans le covoiturage.' : 'Aucun.')); continue; }
+        for (const t of l) {
+          const km = el('input', { class: 'km', type: 'number', min: 0, max: 2000, step: 0.1, value: t.km ?? t.km_auto ?? '' });
+          const valider = async (ok) => {
+            const v = km.value === '' ? null : Number(km.value);
+            const { error } = await sbReel.rpc('frais_valider', { p_offre: t.id, p_effectue: ok, p_km: v });
+            if (error) { toast('Erreur : ' + error.message); return; }
+            toast(ok ? 'Trajet validé.' : 'Trajet noté non effectué.'); afficherFrais();
+          };
+          corps.append(el('div', { class: 'fr-ligne' },
+            el('div', { class: 'fr-tete' }, el('span', {}, t.coach), el('span', {}, jourDe(t.debut))),
+            el('div', { class: 'fr-info' }, t.libelle + (t.lieu ? ' - ' + t.lieu : '') + (t.passagers ? ' - ' + t.passagers + ' passager' + (t.passagers > 1 ? 's' : '') : '')),
+            el('div', { class: 'fr-info' }, 'Aller-retour : ' + (t.km_auto != null ? kmTxt(t.km_auto) + ' calculés (IGN, depuis le stade)' : 'calcul impossible, à saisir')),
+            el('div', { class: 'fr-actions' }, km, 'km aller-retour',
+              t.trajet_valide === true ? el('button', { class: 'mini', onclick: () => valider(true) }, 'Mettre à jour les km')
+                : el('button', { class: 'mini principal', onclick: () => valider(true) }, 'Trajet effectué'),
+              t.trajet_valide === false ? el('button', { class: 'mini', onclick: () => valider(true) }, 'Finalement effectué')
+                : el('button', { class: 'mini danger', onclick: () => valider(false) }, 'Non effectué'))));
+        }
+      }
+    }
+
+    async function ajouterTrajet() {
+      const [{ data: coachs }, { data: evts }] = await Promise.all([
+        sbReel.rpc('frais_coachs'),
+        sbReel.from('evenements').select('id, debut, equipe_id, adversaire, domicile, titre, type, lieu, equipe:equipes(nom)')
+          .in('type', ['match', 'tournoi']).neq('etat', 'annule').gte('debut', FR.depuis).lt('debut', new Date().toISOString()).order('debut', { ascending: false }).limit(200)]);
+      ouvrirFenetre('Ajouter un trajet oublié', (f) => {
+        const selE = el('select', { class: 'champ' }, el('option', { value: '' }, 'Match ?'),
+          (evts || []).map(e => el('option', { value: e.id }, jourDe(e.debut) + ' - ' + (e.equipe ? e.equipe.nom : '') + (e.adversaire ? (e.domicile === false ? ' chez ' : ' contre ') + e.adversaire : '') + (e.titre ? ' - ' + e.titre : ''))));
+        const selC = el('select', { class: 'champ' }, el('option', { value: '' }, 'Coach ou dirigeant ?'));
+        const km = el('input', { class: 'champ', type: 'number', min: 0, max: 2000, step: 0.1, placeholder: 'Kilomètres aller-retour' });
+        selE.onchange = () => {
+          const e = (evts || []).find(x => x.id === selE.value);
+          const eq = e && e.equipe ? e.equipe.nom : '';
+          selC.replaceChildren(el('option', { value: '' }, 'Coach ou dirigeant ?'),
+            ...(coachs || []).filter(c => (c.equipes || '').split(', ').includes(eq)).map(c => el('option', { value: c.personne_id }, c.nom)));
+        };
+        f.append(el('p', { class: 'petit' }, 'Pour un coach qui a conduit sans proposer sa voiture dans l\'application. Le trajet est enregistré comme effectué.'),
+          selE, selC, km,
+          el('div', { class: 'boutons' },
+            el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Annuler'),
+            el('button', { class: 'btn principal', onclick: async () => {
+              if (!selE.value || !selC.value || km.value === '') { toast('Choisissez le match, la personne et les kilomètres.'); return; }
+              const { error } = await sbReel.rpc('frais_ajouter', { p_evenement: selE.value, p_personne: selC.value, p_km: Number(km.value) });
+              if (error) { toast('Erreur : ' + error.message); return; }
+              fermerFenetre(); toast('Trajet ajouté.'); afficherFrais();
+            } }, 'Enregistrer')));
+      });
+    }
+
+    async function fraisVehicules(corps) {
+      const { data, error } = await sbReel.rpc('frais_coachs');
+      if (error) throw error;
+      corps.replaceChildren(el('p', { class: 'petit' }, 'Recopiez la puissance fiscale (case P.6 de la carte grise) et le type de moteur. La photo de la carte grise n\'est pas conservée dans l\'application.'));
+      const club = E.fiches[0] && E.fiches[0].club_id;
+      for (const c of data || []) {
+        const cv = el('select', {}, el('option', { value: '' }, 'Puissance ?'),
+          [[3, '3 CV et moins'], [4, '4 CV'], [5, '5 CV'], [6, '6 CV'], [7, '7 CV et plus']].map(([v, t]) => el('option', { value: v, selected: c.cv != null && (c.cv <= 3 ? 3 : c.cv >= 7 ? 7 : c.cv) === v }, t)));
+        const elec = el('input', { type: 'checkbox', checked: !!c.electrique });
+        corps.append(el('div', { class: 'fr-ligne' },
+          el('div', { class: 'fr-tete' }, el('span', {}, c.nom), el('span', { class: 'petit' }, c.equipes)),
+          el('div', { class: 'fr-info' }, c.cv != null ? 'Enregistré : ' + LIB_CV(c.cv, c.electrique) + (c.maj_le ? ' (le ' + new Date(c.maj_le).toLocaleDateString('fr-FR') + ')' : '') : 'Véhicule non renseigné'),
+          el('div', { class: 'fr-actions' }, cv, el('label', {}, elec, ' 100 % électrique'),
+            el('button', { class: 'mini principal', onclick: async () => {
+              if (!cv.value) { toast('Choisissez la puissance.'); return; }
+              const { error } = await sbReel.from('vehicules').upsert({ personne_id: c.personne_id, club_id: club, cv: +cv.value, electrique: elec.checked,
+                verifie_par: E.fiches[0].id, maj_le: new Date().toISOString() });
+              if (error) { toast('Erreur : ' + error.message); return; }
+              toast('Véhicule enregistré.'); afficherFrais();
+            } }, 'Enregistrer'))));
+      }
+    }
+
+    async function fraisReleve(corps) {
+      const { data, error } = await sbReel.rpc('frais_releve', { p_depuis: FR.depuis, p_jusqua: FR.jusqua });
+      if (error) throw error;
+      const liste = data || [];
+      corps.replaceChildren();
+      const total = liste.reduce((n, r) => n + Number(r.montant || 0), 0), totalKm = liste.reduce((n, r) => n + Number(r.km || 0), 0);
+      corps.append(el('p', { class: 'petit' }, 'Point d\'étape du ' + new Date(FR.depuis).toLocaleDateString('fr-FR') + ' au ' + new Date(FR.jusqua).toLocaleDateString('fr-FR')
+        + ' : trajets validés seulement, barème kilométrique officiel (arrêté du 27 mars 2023, reconduit ; + 20 % pour un véhicule électrique). Montant indicatif : aucun reçu n\'est émis.'),
+        el('div', { class: 'fr-total' }, liste.length + ' personne' + (liste.length > 1 ? 's' : '') + ' - ' + kmTxt(totalKm) + ' - ' + euros(total)));
+      if (!liste.length) corps.append(el('p', { class: 'vide' }, 'Aucun trajet validé sur la période.'));
+      for (const r of liste) {
+        corps.append(el('div', { class: 'fr-ligne' },
+          el('div', { class: 'fr-tete' }, el('span', {}, r.nom), el('span', {}, r.montant != null ? euros(r.montant) : 'véhicule à renseigner')),
+          el('div', { class: 'fr-info' }, r.trajets + ' trajet' + (r.trajets > 1 ? 's' : '') + ' - ' + kmTxt(r.km) + ' - ' + LIB_CV(r.cv, r.electrique)),
+          el('details', { class: 'details-liste' }, el('summary', {}, 'Détail des trajets'),
+            (r.detail || []).map(d => el('div', { class: 'ligne-joueur' }, el('span', {}, new Date(d.date).toLocaleDateString('fr-FR') + ' - ' + d.libelle), el('span', {}, kmTxt(d.km)))))));
+      }
+      if (liste.length) corps.append(el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => {
+        const lignes = [['Nom', 'Date', 'Match', 'Lieu', 'Km aller-retour', 'Puissance', 'Électrique']];
+        for (const r of liste) for (const d of r.detail || []) lignes.push([r.nom, new Date(d.date).toLocaleDateString('fr-FR'), d.libelle, d.lieu || '', String(d.km).replace('.', ','), r.cv ?? '', r.electrique ? 'oui' : 'non']);
+        lignes.push([]); for (const r of liste) lignes.push([r.nom, 'Total', r.trajets + ' trajets', '', String(r.km).replace('.', ','), r.cv ?? '', r.montant != null ? String(r.montant).replace('.', ',') + ' €' : 'véhicule à renseigner']);
+        const csv = '\ufeff' + lignes.map(l => l.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+        const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'Frais coachs ' + FR.depuis + ' au ' + FR.jusqua + '.csv' });
+        document.body.append(a); a.click(); a.remove();
+      } }, 'Exporter le relevé (tableur)')));
     }
 
     // ---------- Mises à jour SportEasy (administrateurs) ----------
