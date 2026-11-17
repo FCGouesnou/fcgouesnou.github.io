@@ -5,7 +5,10 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.5 - 17/11/2026 - vue « Dons » : dons des entreprises et des particuliers (licenciés, familles),
+  Version : 1.6 - 17/11/2026 - reçus fiscaux en PDF sur les modèles officiels (fonction Edge « recu-fiscal ») :
+            aperçu « non valable » avant validation, reçu signé et conservé après validation ;
+            signature + tampon enregistrés par un administrateur ; forme juridique de l'entreprise
+            1.5 - 17/11/2026 - vue « Dons » : dons des entreprises et des particuliers (licenciés, familles),
             reçu fiscal préparé (Cerfa 16216 entreprise, 11580 particulier), validé avec un numéro d'ordre
             AAAA-NNN, registre par année et export ; dons des contrats « Don » repris (reçus antérieurs)
             1.4.1 - 13/11/2026 - balises des modèles toutes remplacées : {{Formule}}, {{Montant}}, {{DateFin}}
@@ -106,6 +109,7 @@ export function initPartenaires(ctx) {
     S.lecture = r.some(x => ['admin', 'codir', 'partenaires'].includes(x.role));
     S.peutModifier = r.some(x => ['admin', 'partenaires'].includes(x.role));
     S.peutCompta = S.peutModifier || r.some(x => x.role === 'finances');
+    S.estAdmin = r.some(x => x.role === 'admin');
     S.clubId = (r[0] || {}).club_id || null;
     // Nom de la personne connectée, pour la balise {{Référent}} des modèles de mail
     try {
@@ -808,7 +812,8 @@ export function initPartenaires(ctx) {
       el('p', { class: 'petit' }, 'Dons sans contrepartie des entreprises (Cerfa 16216) et des particuliers (Cerfa 11580). Un contrat avec panneau ou visibilité est du parrainage : facture, pas de reçu. Année civile = année fiscale du donateur.'),
       el('div', { class: 'p-barre' }, selAnnee,
         el('button', { class: 'mini', onclick: () => formDon(null) }, '+ Don'),
-        el('button', { class: 'mini', onclick: () => exporterRegistre(liste) }, 'Exporter le registre')));
+        el('button', { class: 'mini', onclick: () => exporterRegistre(liste) }, 'Exporter le registre'),
+        S.estAdmin ? el('button', { class: 'mini', onclick: () => formSignature() }, 'Signature des reçus') : null));
     if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun don enregistré en ' + S.anneeDons + '.')); return; }
     for (const statut of ['à valider', 'validé', 'envoyé', 'antérieur', 'annulé']) {
       const l = liste.filter(d => d.recu_statut === statut);
@@ -822,7 +827,7 @@ export function initPartenaires(ctx) {
     const actions = el('span', { class: 'p-boutons' });
     if (d.recu_statut === 'à valider') {
       actions.append(el('button', { class: 'mini', onclick: () => formDon(d) }, 'Modifier'),
-        el('button', { class: 'mini', onclick: () => apercuRecu(d) }, 'Aperçu du reçu'),
+        el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Aperçu du reçu'),
         el('button', { class: 'mini principal', onclick: async () => {
           if (!confirm('Valider le reçu de ' + d.donateur_nom + ' (' + eur(d.montant) + ') ? Un numéro d\'ordre lui sera attribué et il ne pourra plus être modifié.')) return;
           const { data: num, error } = await sb.rpc('don_valider', { p_don: d.id });
@@ -836,7 +841,7 @@ export function initPartenaires(ctx) {
           toast('Don supprimé.'); dessinerDons(zone);
         } }, 'Supprimer'));
     } else if (['validé', 'envoyé'].includes(d.recu_statut)) {
-      actions.append(el('button', { class: 'mini', onclick: () => apercuRecu(d) }, 'Voir le reçu'),
+      actions.append(el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Reçu PDF'),
         el('button', { class: 'mini danger', onclick: async () => {
           const motif = prompt('Motif de l\'annulation du reçu n° ' + d.recu_numero + ' :');
           if (!motif) return;
@@ -861,6 +866,7 @@ export function initPartenaires(ctx) {
         S.entreprises.map(e => el('option', { value: e.id, selected: d && d.entreprise_id === e.id }, e.nom)));
       const nom = entree(d && d.donateur_nom, { placeholder: 'Raison sociale, ou Nom Prénom' });
       const siren = entree(d && d.donateur_siren, { placeholder: 'SIREN (entreprise)' });
+      const fj = entree(d && d.donateur_forme_juridique, { placeholder: 'SARL, SAS, EURL, SA...' });
       const adr = entree(d && d.donateur_adresse, { placeholder: 'Adresse' });
       const cp = entree(d && d.donateur_cp, { placeholder: 'Code postal' });
       const ville = entree(d && d.donateur_ville, { placeholder: 'Ville' });
@@ -871,8 +877,8 @@ export function initPartenaires(ctx) {
       const moyen = sel(MOYENS, d ? d.moyen : 'Chèque'), nature = sel(NATURES, d ? d.nature : 'Numéraire'), forme = sel(FORMES, d ? d.forme : 'Déclaration de don manuel');
       const desc = zoneTexte(d && d.description, 2); desc.placeholder = 'Don en nature : description et valeur retenue';
       const com = zoneTexte(d && d.commentaire, 2); com.placeholder = 'Commentaire interne';
-      const zEnt = champ('Entreprise', selEnt), zSiren = champ('SIREN', siren);
-      const maj = () => { const e = type.value === 'entreprise'; zEnt.hidden = !e; zSiren.hidden = !e; };
+      const zEnt = champ('Entreprise', selEnt), zSiren = champ('SIREN', siren), zFj = champ('Forme juridique', fj);
+      const maj = () => { const e = type.value === 'entreprise'; zEnt.hidden = !e; zSiren.hidden = !e; zFj.hidden = !e; };
       type.onchange = maj; maj();
       selEnt.onchange = async () => {
         if (!selEnt.value) return;
@@ -880,7 +886,7 @@ export function initPartenaires(ctx) {
         if (!e) return;
         nom.value = e.nom || ''; adr.value = e.adresse || ''; cp.value = e.code_postal || ''; ville.value = e.ville || ''; if (!mail.value) mail.value = e.email || '';
       };
-      f.append(champ('Donateur', type), zEnt, champ('Nom', nom), zSiren, champ('Adresse', adr),
+      f.append(champ('Donateur', type), zEnt, champ('Nom', nom), el('div', { class: 'p-deux' }, zSiren, zFj), champ('Adresse', adr),
         el('div', { class: 'p-deux' }, champ('Code postal', cp), champ('Ville', ville)), champ('E-mail', mail),
         el('div', { class: 'p-deux' }, champ('Montant (€)', montant), champ('Date du don', date)),
         el('div', { class: 'p-deux' }, champ('Mode de paiement', moyen), champ('Nature', nature)), champ('Forme du don', forme),
@@ -892,6 +898,7 @@ export function initPartenaires(ctx) {
             const e = type.value === 'entreprise';
             const ligne = { donateur_type: type.value, entreprise_id: e ? (selEnt.value || null) : null,
               donateur_nom: e ? vide(nom.value) : casseNom(nom.value), donateur_siren: e ? vide(siren.value.replace(/\s/g, '')) : null,
+              donateur_forme_juridique: e ? vide(fj.value) : null,
               donateur_adresse: vide(adr.value) ? casseAdresse(adr.value) : null, donateur_cp: vide(cp.value), donateur_ville: vide(ville.value) ? casseNom(ville.value) : null,
               donateur_email: vide(mail.value), montant: m, date_don: date.value, moyen: moyen.value, nature: nature.value, forme: forme.value,
               description: vide(desc.value), commentaire: vide(com.value), modifie_le: new Date().toISOString() };
@@ -903,24 +910,46 @@ export function initPartenaires(ctx) {
     });
   }
 
-  // Aperçu du reçu (contenu repris du modèle Cerfa) : le PDF officiel signé viendra à l'étape suivante
-  function apercuRecu(d) {
-    const c = S.club || {}, ent = d.donateur_type === 'entreprise';
-    const l = (t, v) => el('div', { class: 'ligne-joueur' }, el('span', {}, t), el('strong', {}, v || '-'));
-    fenetre((ent ? 'Reçu au titre des dons (entreprise) - Cerfa 16216*01' : 'Reçu au titre des dons (particulier) - Cerfa 11580*05'), (f) => f.append(
-      el('p', { class: 'petit' }, d.recu_numero ? 'Reçu n° ' + d.recu_numero + ' du ' + dateFr(d.recu_date) : 'Aperçu : numéro attribué à la validation'),
-      el('h4', { class: 'p-titre' }, 'Bénéficiaire'),
-      l('Nom', c.nom_officiel), l('Adresse', [c.siege_adresse, c.siege_cp, c.siege_ville].filter(Boolean).join(', ')),
-      l('RNA', c.rna), l('SIRET', c.siret), l('Objet', c.objet), l('Qualité', 'Œuvre ou organisme d\'intérêt général (à confirmer par le trésorier)'),
-      el('h4', { class: 'p-titre' }, ent ? 'Entreprise donatrice' : 'Donateur'),
-      l(ent ? 'Dénomination' : 'Nom et prénom', d.donateur_nom), ent ? l('SIREN', d.donateur_siren) : null,
-      l('Adresse', [d.donateur_adresse, d.donateur_cp, d.donateur_ville].filter(Boolean).join(', ')),
-      el('h4', { class: 'p-titre' }, 'Don'),
-      l('Montant', eur(d.montant)), l('Date du versement', dateFr(d.date_don)), l('Nature', d.nature), l('Forme', d.forme), l('Mode de versement', d.moyen),
-      d.description ? l('Description', d.description) : null,
-      l('Signataire', [c.recu_signataire, c.recu_qualite].filter(Boolean).join(', ')),
-      el('p', { class: 'petit' }, 'Le PDF officiel, avec signature et tampon, et son envoi par e-mail arrivent à l\'étape suivante.'),
-      el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermer }, 'Fermer'))));
+  // Reçu en PDF sur le modèle officiel (fonction Edge « recu-fiscal ») : aperçu « non valable » tant
+  // que le reçu n'est pas validé ; ensuite reçu signé, produit une seule fois et conservé.
+  // La fenêtre est ouverte avant l'appel pour ne pas être bloquée par le navigateur.
+  async function ouvrirRecu(d) {
+    const w = window.open('', '_blank');
+    if (w) w.document.write('<p style="font-family:sans-serif;padding:1em">Préparation du reçu...</p>');
+    const { data, error } = await sb.functions.invoke('recu-fiscal', { body: { action: 'pdf', don: d.id } });
+    let msg = data && data.erreur;
+    if (error && !msg) { try { msg = (await error.context.json()).erreur; } catch (e) { msg = error.message; } }
+    if (msg || !data || !data.url) { if (w) w.close(); toast('Reçu indisponible : ' + (msg || 'erreur inconnue')); return; }
+    if (w) w.location.href = data.url; else location.href = data.url;
+  }
+
+  // Signature + tampon du signataire des reçus (image PNG, fond transparent de préférence) : administrateurs
+  function formSignature() {
+    const c = S.club || {};
+    fenetre('Signature des reçus fiscaux', async (f) => {
+      const zone = el('div', { class: 'p-signature' }, el('p', { class: 'petit' }, 'Chargement...'));
+      const fichier = el('input', { type: 'file', accept: 'image/png', class: 'champ' });
+      f.append(el('p', { class: 'petit' }, 'Signataire : ' + ([c.recu_signataire, c.recu_qualite].filter(Boolean).join(', ') || '-') +
+          '. L\'image (signature et tampon du club, PNG) est conservée dans un dossier privé, lisible seulement par la fonction qui produit les reçus. ' +
+          'À n\'enregistrer qu\'avec l\'accord du signataire.'),
+        zone, champ('Nouvelle image (PNG)', fichier),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermer }, 'Fermer'),
+          el('button', { class: 'btn principal', onclick: async () => {
+            const fi = fichier.files && fichier.files[0];
+            if (!fi) { toast('Choisissez l\'image PNG.'); return; }
+            if (fi.size > 2000000) { toast('Image trop lourde (2 Mo au plus).'); return; }
+            const b64 = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ko; r.readAsDataURL(fi); });
+            const { data, error } = await sb.functions.invoke('recu-fiscal', { body: { action: 'signature', image: b64 } });
+            let msg = data && data.erreur;
+            if (error && !msg) { try { msg = (await error.context.json()).erreur; } catch (e) { msg = error.message; } }
+            if (msg) { toast('Erreur : ' + msg); return; }
+            fermer(); toast('Signature et tampon enregistrés.');
+          } }, 'Enregistrer')));
+      const { data } = await sb.functions.invoke('recu-fiscal', { body: { action: 'signature_voir' } });
+      zone.replaceChildren(data && data.url
+        ? el('img', { src: data.url, alt: 'Signature et tampon enregistrés', style: 'max-width:260px;background:#fff;border:1px solid #ddd;padding:6px' })
+        : el('p', { class: 'vide' }, 'Aucune signature enregistrée : les reçus validés ne peuvent pas encore être produits.'));
+    });
   }
 
   function exporterRegistre(liste) {
