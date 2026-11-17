@@ -5,7 +5,8 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.7 - 17/11/2026 - envoi du reçu signé par e-mail au donateur (bouton « Envoyer par e-mail »,
+  Version : 1.8 - 17/11/2026 - rôle « secrétariat » : consultation des partenaires et accès complet aux dons
+            1.7 - 17/11/2026 - envoi du reçu signé par e-mail au donateur (bouton « Envoyer par e-mail »,
             « Renvoyer » ensuite), adresse demandée si elle manque
             1.6 - 17/11/2026 - reçus fiscaux en PDF sur les modèles officiels (fonction Edge « recu-fiscal ») :
             aperçu « non valable » avant validation, reçu signé et conservé après validation ;
@@ -108,9 +109,10 @@ export function initPartenaires(ctx) {
   async function initialiser() {
     const { data: roles } = await sb.rpc('mes_roles');
     const r = roles || [];
-    S.lecture = r.some(x => ['admin', 'codir', 'partenaires'].includes(x.role));
+    S.lecture = r.some(x => ['admin', 'codir', 'partenaires', 'secretariat'].includes(x.role));
     S.peutModifier = r.some(x => ['admin', 'partenaires'].includes(x.role));
     S.peutCompta = S.peutModifier || r.some(x => x.role === 'finances');
+    S.peutDons = S.peutCompta || r.some(x => x.role === 'secretariat');
     S.estAdmin = r.some(x => x.role === 'admin');
     S.clubId = (r[0] || {}).club_id || null;
     // Nom de la personne connectée, pour la balise {{Référent}} des modèles de mail
@@ -148,7 +150,7 @@ export function initPartenaires(ctx) {
     const zone = S.zone; zone.replaceChildren();
     const nav = el('div', { class: 'p-onglets' });
     const corps = el('div', {});
-    [['tableau', 'Tableau de bord'], ['liste', 'Entreprises'], ...(S.peutCompta ? [['dons', 'Dons']] : [])].forEach(([v, t]) => nav.append(el('button', {
+    [['tableau', 'Tableau de bord'], ['liste', 'Entreprises'], ...(S.peutDons ? [['dons', 'Dons']] : [])].forEach(([v, t]) => nav.append(el('button', {
       class: 'onglet' + (S.vue === v ? ' actif' : ''), onclick: () => { S.vue = v; dessiner(); } }, t)));
     zone.append(nav, corps);
     if (S.vue === 'tableau') dessinerTableau(corps); else if (S.vue === 'dons') dessinerDons(corps); else dessinerListe(corps);
