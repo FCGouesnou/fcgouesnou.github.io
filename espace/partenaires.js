@@ -5,7 +5,9 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.6 - 17/11/2026 - reçus fiscaux en PDF sur les modèles officiels (fonction Edge « recu-fiscal ») :
+  Version : 1.7 - 17/11/2026 - envoi du reçu signé par e-mail au donateur (bouton « Envoyer par e-mail »,
+            « Renvoyer » ensuite), adresse demandée si elle manque
+            1.6 - 17/11/2026 - reçus fiscaux en PDF sur les modèles officiels (fonction Edge « recu-fiscal ») :
             aperçu « non valable » avant validation, reçu signé et conservé après validation ;
             signature + tampon enregistrés par un administrateur ; forme juridique de l'entreprise
             1.5 - 17/11/2026 - vue « Dons » : dons des entreprises et des particuliers (licenciés, familles),
@@ -842,6 +844,8 @@ export function initPartenaires(ctx) {
         } }, 'Supprimer'));
     } else if (['validé', 'envoyé'].includes(d.recu_statut)) {
       actions.append(el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Reçu PDF'),
+        el('button', { class: 'mini' + (d.recu_statut === 'validé' ? ' principal' : ''), onclick: () => envoyerRecu(d, zone) },
+          d.recu_statut === 'envoyé' ? 'Renvoyer' : 'Envoyer par e-mail'),
         el('button', { class: 'mini danger', onclick: async () => {
           const motif = prompt('Motif de l\'annulation du reçu n° ' + d.recu_numero + ' :');
           if (!motif) return;
@@ -853,7 +857,8 @@ export function initPartenaires(ctx) {
     return el('div', { class: 'p-ligne' },
       el('div', { class: 'p-ligne-nom' }, d.donateur_nom,
         el('small', {}, [dateFr(d.date_don), d.donateur_type === 'entreprise' ? 'Entreprise' : 'Particulier', d.moyen, d.nature !== 'Numéraire' ? d.nature : null,
-          d.recu_numero ? 'reçu n° ' + d.recu_numero : null].filter(Boolean).join(' · '))),
+          d.recu_numero ? 'reçu n° ' + d.recu_numero : null,
+          d.recu_envoye_le ? 'envoyé le ' + dateFr(d.recu_envoye_le.slice(0, 10)) : null].filter(Boolean).join(' · '))),
       el('div', { class: 'p-ligne-info' }, el('strong', {}, eur(d.montant)), actions));
   }
 
@@ -921,6 +926,20 @@ export function initPartenaires(ctx) {
     if (error && !msg) { try { msg = (await error.context.json()).erreur; } catch (e) { msg = error.message; } }
     if (msg || !data || !data.url) { if (w) w.close(); toast('Reçu indisponible : ' + (msg || 'erreur inconnue')); return; }
     if (w) w.location.href = data.url; else location.href = data.url;
+  }
+
+  // Envoi du reçu signé par e-mail (depuis contact@), avec l'adresse du don ou celle saisie
+  async function envoyerRecu(d, zone) {
+    const saisie = prompt((d.recu_statut === 'envoyé' ? 'Renvoyer' : 'Envoyer') + ' le reçu n° ' + d.recu_numero + ' à l\'adresse :', d.donateur_email || '');
+    if (saisie === null) return;
+    const email = saisie.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Adresse e-mail invalide.'); return; }
+    toast('Envoi en cours...');
+    const { data, error } = await sb.functions.invoke('recu-fiscal', { body: { action: 'envoyer', don: d.id, email } });
+    let msg = data && data.erreur;
+    if (error && !msg) { try { msg = (await error.context.json()).erreur; } catch (e) { msg = error.message; } }
+    if (msg) { toast('Envoi impossible : ' + msg); return; }
+    toast('Reçu n° ' + d.recu_numero + ' envoyé à ' + data.email + '.'); dessinerDons(zone);
   }
 
   // Signature + tampon du signataire des reçus (image PNG, fond transparent de préférence) : administrateurs
