@@ -5,7 +5,10 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.8 - 17/11/2026 - rôle « secrétariat » : consultation des partenaires et accès complet aux dons
+  Version : 1.9 - 17/11/2026 - entreprises archivées (fermeture, départ du contact...) : bouton « Archiver » /
+            « Désarchiver » sur la fiche, choix « Entreprises archivées » dans la liste ; hors listes,
+            tableau de bord et relances, historique conservé
+            1.8 - 17/11/2026 - rôle « secrétariat » : consultation des partenaires et accès complet aux dons
             1.7 - 17/11/2026 - envoi du reçu signé par e-mail au donateur (bouton « Envoyer par e-mail »,
             « Renvoyer » ensuite), adresse demandée si elle manque
             1.6 - 17/11/2026 - reçus fiscaux en PDF sur les modèles officiels (fonction Edge « recu-fiscal ») :
@@ -134,7 +137,8 @@ export function initPartenaires(ctx) {
   async function chargerListe() {
     const { data, error } = await sb.from('part_vue_entreprises').select('*').order('nom');
     if (error) { toast('Erreur : ' + error.message); return; }
-    S.entreprises = data || [];
+    S.tous = data || [];
+    S.entreprises = S.tous.filter(e => !e.archive_le);
   }
 
   // ---------- Liste ----------
@@ -167,9 +171,9 @@ export function initPartenaires(ctx) {
       el('div', {}, el('strong', {}, String(nbVerif)), el('span', {}, 'points à vérifier'))));
 
     const recherche = el('input', { class: 'champ', placeholder: 'Rechercher une entreprise, une ville, un secteur', value: S.filtre });
-    const statuts = ['actifs', 'tous', 'à vérifier', ...(S.listes['Statut partenaire'] || [])];
+    const statuts = ['actifs', 'tous', 'à vérifier', ...(S.listes['Statut partenaire'] || []), 'archivées'];
     const selStatut = el('select', { class: 'champ' }, statuts.map(s => el('option', { value: s, selected: s === S.statut },
-      s === 'actifs' ? 'Partenaires actifs' : s === 'tous' ? 'Toutes les entreprises' : s === 'à vérifier' ? 'Avec des points à vérifier' : s)));
+      s === 'actifs' ? 'Partenaires actifs' : s === 'tous' ? 'Toutes les entreprises' : s === 'à vérifier' ? 'Avec des points à vérifier' : s === 'archivées' ? 'Entreprises archivées (' + (S.tous.length - S.entreprises.length) + ')' : s)));
     const liste = el('div', { class: 'p-liste' });
     const barre = el('div', { class: 'p-barre' }, recherche, selStatut,
       S.peutModifier ? el('button', { class: 'mini', onclick: () => nouvelleEntreprise() }, '+ Entreprise') : null);
@@ -177,15 +181,17 @@ export function initPartenaires(ctx) {
 
     function remplir() {
       const q = S.filtre.toLowerCase();
-      const l = S.entreprises.filter(e =>
-        (S.statut === 'tous' || (S.statut === 'actifs' ? /actif/i.test(e.statut || '') : S.statut === 'à vérifier' ? Number(e.a_verifier) > 0 : e.statut === S.statut)) &&
+      const arch = S.statut === 'archivées';
+      const l = (arch ? S.tous.filter(e => e.archive_le) : S.entreprises).filter(e =>
+        (S.statut === 'tous' || arch || (S.statut === 'actifs' ? /actif/i.test(e.statut || '') : S.statut === 'à vérifier' ? Number(e.a_verifier) > 0 : e.statut === S.statut)) &&
         (!q || [e.nom, e.ville, e.secteur, e.ref, e.referent].some(x => (x || '').toLowerCase().includes(q))));
       liste.replaceChildren(...(l.length ? l.map(e => {
         const reste = Number(e.attendu || 0) - Number(e.recu || 0);
         return el('button', { class: 'p-ligne', onclick: () => ouvrirFiche(e.id) },
           el('div', { class: 'p-ligne-nom' }, e.nom, el('small', {}, [e.ville, e.secteur].filter(Boolean).join(' · '))),
           el('div', { class: 'p-ligne-info' },
-            el('span', { class: 'pastille ' + (/actif/i.test(e.statut || '') ? 'p-entrainement' : 'p-autre') }, e.statut || '-'),
+            e.archive_le ? el('span', { class: 'pastille p-autre' }, 'Archivée' + (e.archive_motif ? ' - ' + e.archive_motif : ''))
+              : el('span', { class: 'pastille ' + (/actif/i.test(e.statut || '') ? 'p-entrainement' : 'p-autre') }, e.statut || '-'),
             Number(e.attendu) ? el('span', { class: 'petit' }, eur(e.recu) + ' / ' + eur(e.attendu) + (reste > 0.009 ? ' - reste ' + eur(reste) : '')) : null,
             Number(e.a_verifier) ? el('span', { class: 'p-marque' }, e.a_verifier + ' à vérifier') : null,
             Number(e.actions_a_faire) ? el('span', { class: 'pastille p-match' }, e.actions_a_faire + ' action(s)') : null));
@@ -248,8 +254,8 @@ export function initPartenaires(ctx) {
     };
     const auj = new Date().toISOString().slice(0, 10);
     const retard = (d) => d && d < auj;
-    const nomDe = (id) => (S.entreprises.find(e => e.id === id) || {}).nom || '-';
-    const statutDe = (id) => (S.entreprises.find(e => e.id === id) || {}).statut || '';
+    const nomDe = (id) => (S.tous.find(e => e.id === id) || {}).nom || '-';
+    const statutDe = (id) => (S.tous.find(e => e.id === id) || {}).statut || '';
     const jours = (iso) => Math.round((new Date(iso + 'T00:00:00') - new Date(auj + 'T00:00:00')) / 86400000);
     const peut = S.peutModifier;
     // Ligne de travail : le nom ouvre la fiche, les boutons agissent directement
@@ -340,7 +346,7 @@ export function initPartenaires(ctx) {
     });
   }
   async function planifier(entrepriseId, type, dans, objet) {
-    const e = S.entreprises.find(z => z.id === entrepriseId) || {};
+    const e = S.tous.find(z => z.id === entrepriseId) || {};
     const { error } = await sb.from('part_actions').insert({ club_id: S.clubId, entreprise_id: entrepriseId, type, statut: 'À faire',
       date_prevue: isoDans(dans), objet, responsable: e.referent || null });
     if (error) { toast('Erreur : ' + error.message); return; }
@@ -370,9 +376,9 @@ export function initPartenaires(ctx) {
     const lib = ' ' + sansAccent(x.libelle).replace(/[^a-z0-9]+/g, ' ') + ' ';
     // Noms utilisés par la banque ou la compta (repris de l'ancien rapprochement)
     const ALIAS = { salgo: 'U Express Gouesnou', kerbar: 'E.Leclerc Gouesnou', somega: 'Atymo', larvor: 'Meubles Gautier Brest', smpi: 'Meubles Gautier Brest' };
-    for (const [m, nom] of Object.entries(ALIAS)) if (lib.includes(' ' + m + ' ')) { const e = S.entreprises.find(z => z.nom === nom); if (e) return e.id; }
+    for (const [m, nom] of Object.entries(ALIAS)) if (lib.includes(' ' + m + ' ')) { const e = S.tous.find(z => z.nom === nom); if (e) return e.id; }
     let best = null, score = 0;
-    for (const e of S.entreprises) {
+    for (const e of S.tous) {
       const mots = sansAccent(e.nom).replace(/\(.*?\)/g, ' ').split(/[^a-z0-9]+/).filter(m => m.length >= 4 && !['sarl', 'gouesnou', 'brest', 'garage', 'ecole'].includes(m));
       const n = mots.filter(m => lib.includes(' ' + m + ' ')).length;
       if (n > score) { score = n; best = e.id; }
@@ -483,12 +489,37 @@ export function initPartenaires(ctx) {
       } }, t)));
       const principal = (contacts || []).find(c => c.principal && c.email) || (contacts || []).find(c => c.email);
       f.append(el('p', { class: 'petit' }, [e.ref, e.statut, e.secteur, e.ville, e.referent ? 'référent ' + e.referent : null].filter(Boolean).join(' · ')),
+        e.archive_le ? el('p', { class: 'p-marque' }, 'Entreprise archivée le ' + dateFr(e.archive_le.slice(0, 10)) + (e.archive_motif ? ' - ' + e.archive_motif : '')) : null,
         el('div', { class: 'actions-coach' },
           principal || e.email ? el('button', { class: 'mini', onclick: () => ecrire(e, principal, { contrat: [...(contrats || [])].sort((x, y) => (y.saison_debut || '').localeCompare(x.saison_debut || ''))[0] || null }) }, 'Écrire un mail') : null,
+          S.peutModifier ? el('button', { class: 'mini', onclick: () => e.archive_le ? desarchiver(e) : formArchiver(e) }, e.archive_le ? 'Désarchiver' : 'Archiver') : null,
           el('button', { class: 'mini', onclick: fermer }, 'Fermer')),
         onglets, corps);
       corps.append(sections[0][1]());
     });
+  }
+  // Archivage : l'entreprise sort des listes, du tableau de bord et des relances ; son historique est conservé
+  function formArchiver(e) {
+    fenetre('Archiver ' + e.nom, (f) => {
+      const motif = el('select', { class: 'champ' }, ['Fermeture', 'Départ du contact (retraite)', 'Départ du contact', 'Ne souhaite plus être sollicitée', 'Autre']
+        .map(m => el('option', { value: m }, m)));
+      const precision = entree('', { placeholder: 'Précision (facultatif)' });
+      f.append(el('p', { class: 'petit' }, 'L\'entreprise n\'apparaîtra plus dans les listes, le tableau de bord ni les relances. Ses contrats, paiements et échanges sont conservés ; elle reste visible avec le choix « Entreprises archivées » et peut être désarchivée.'),
+        champ('Motif', motif), champ('Précision', precision),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => ouvrirFiche(e.id) }, 'Annuler'),
+          el('button', { class: 'btn principal', onclick: async () => {
+            const m = motif.value + (precision.value.trim() ? ' - ' + precision.value.trim() : '');
+            const { error } = await sb.from('part_entreprises').update({ archive_le: new Date().toISOString(), archive_motif: m }).eq('id', e.id);
+            if (error) { toast('Erreur : ' + error.message); return; }
+            toast(e.nom + ' archivée.'); fermer(); await chargerListe(); if (S.zone) dessiner();
+          } }, 'Archiver')));
+    });
+  }
+  async function desarchiver(e) {
+    if (!confirm('Désarchiver ' + e.nom + ' ? Elle réapparaîtra dans les listes et les relances.')) return;
+    const { error } = await sb.from('part_entreprises').update({ archive_le: null, archive_motif: null }).eq('id', e.id);
+    if (error) { toast('Erreur : ' + error.message); return; }
+    toast(e.nom + ' désarchivée.'); rafraichir(e.id);
   }
   async function rafraichir(id) { await chargerListe(); if (S.zone) dessiner(); ouvrirFiche(id); }
 
