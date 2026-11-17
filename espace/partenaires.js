@@ -5,7 +5,10 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.4.1 - 13/11/2026 - balises des modèles toutes remplacées : {{Formule}}, {{Montant}}, {{DateFin}}
+  Version : 1.5 - 17/11/2026 - vue « Dons » : dons des entreprises et des particuliers (licenciés, familles),
+            reçu fiscal préparé (Cerfa 16216 entreprise, 11580 particulier), validé avec un numéro d'ordre
+            AAAA-NNN, registre par année et export ; dons des contrats « Don » repris (reçus antérieurs)
+            1.4.1 - 13/11/2026 - balises des modèles toutes remplacées : {{Formule}}, {{Montant}}, {{DateFin}}
             (dernier contrat), {{Saison}}, {{Référent}} = personne connectée qui prépare le mail
             1.4 - 13/11/2026 - listes de travail actionnables (reprise des derniers écrans de l'ancien module) :
             actions (Fait avec compte rendu, Mail, +7 j, Annuler), paiements attendus (rappel de paiement),
@@ -139,10 +142,10 @@ export function initPartenaires(ctx) {
     const zone = S.zone; zone.replaceChildren();
     const nav = el('div', { class: 'p-onglets' });
     const corps = el('div', {});
-    [['tableau', 'Tableau de bord'], ['liste', 'Entreprises']].forEach(([v, t]) => nav.append(el('button', {
+    [['tableau', 'Tableau de bord'], ['liste', 'Entreprises'], ...(S.peutCompta ? [['dons', 'Dons']] : [])].forEach(([v, t]) => nav.append(el('button', {
       class: 'onglet' + (S.vue === v ? ' actif' : ''), onclick: () => { S.vue = v; dessiner(); } }, t)));
     zone.append(nav, corps);
-    if (S.vue === 'tableau') dessinerTableau(corps); else dessinerListe(corps);
+    if (S.vue === 'tableau') dessinerTableau(corps); else if (S.vue === 'dons') dessinerDons(corps); else dessinerListe(corps);
   }
   function dessinerListe(zone) {
     const actifs = S.entreprises.filter(e => /actif/i.test(e.statut || ''));
@@ -772,6 +775,162 @@ export function initPartenaires(ctx) {
             if (opt.retour) apresListe(opt.actionId ? 'actions' : 'renouvellements', 'Mail ouvert dans votre messagerie et noté dans l\'historique.');
           } }, 'Ouvrir dans ma messagerie')));
     });
+  }
+
+  // ---------- Dons et reçus fiscaux ----------
+  // Entreprise : Cerfa 16216*01 (mécénat) ; particulier : Cerfa 11580*05. Le numéro d'ordre (AAAA-NNN)
+  // est attribué par la base à la validation ; un reçu validé ne se modifie plus (annulation motivée).
+  const MOYENS = ['Chèque', 'Virement', 'Espèces', 'Carte', 'Prélèvement', 'Autre'];
+  const NATURES = ['Numéraire', 'En nature', 'Titres', 'Autre'];
+  const FORMES = ['Déclaration de don manuel', 'Acte sous seing privé', 'Acte authentique', 'Autre'];
+  const STATUTS_DON = { 'à valider': 'Reçu à valider', 'validé': 'Reçu validé', 'envoyé': 'Reçu envoyé', 'annulé': 'Reçu annulé', 'antérieur': 'Reçu antérieur (hors application)' };
+  S.anneeDons = S.anneeDons || String(new Date().getFullYear());
+
+  async function dessinerDons(zone) {
+    zone.replaceChildren(el('p', { class: 'petit' }, 'Chargement des dons...'));
+    const [{ data, error }, { data: club }] = await Promise.all([
+      sb.from('dons').select('*').order('date_don', { ascending: false }),
+      sb.from('clubs').select('nom_officiel, siege_adresse, siege_cp, siege_ville, rna, siret, objet, recu_signataire, recu_qualite').limit(1)]);
+    if (error) { zone.replaceChildren(el('p', { class: 'vide' }, 'Dons indisponibles : ' + error.message)); return; }
+    S.club = (club || [])[0] || {};
+    const tous = data || [];
+    const annees = [...new Set([String(new Date().getFullYear()), ...tous.map(d => d.date_don.slice(0, 4))])].sort().reverse();
+    const liste = tous.filter(d => d.date_don.startsWith(S.anneeDons));
+    const total = liste.filter(d => d.recu_statut !== 'annulé').reduce((n, d) => n + Number(d.montant), 0);
+    const selAnnee = el('select', { class: 'champ' }, annees.map(a => el('option', { value: a, selected: a === S.anneeDons }, 'Dons de ' + a)));
+    selAnnee.onchange = () => { S.anneeDons = selAnnee.value; dessinerDons(zone); };
+    zone.replaceChildren(
+      el('div', { class: 'p-resume' },
+        el('div', {}, el('strong', {}, String(liste.length)), el('span', {}, 'dons en ' + S.anneeDons)),
+        el('div', {}, el('strong', {}, eur(total)), el('span', {}, 'montant des dons')),
+        el('div', {}, el('strong', {}, String(liste.filter(d => d.recu_statut === 'à valider').length)), el('span', {}, 'reçus à valider')),
+        el('div', {}, el('strong', {}, String(liste.filter(d => ['validé', 'envoyé'].includes(d.recu_statut)).length)), el('span', {}, 'reçus validés'))),
+      el('p', { class: 'petit' }, 'Dons sans contrepartie des entreprises (Cerfa 16216) et des particuliers (Cerfa 11580). Un contrat avec panneau ou visibilité est du parrainage : facture, pas de reçu. Année civile = année fiscale du donateur.'),
+      el('div', { class: 'p-barre' }, selAnnee,
+        el('button', { class: 'mini', onclick: () => formDon(null) }, '+ Don'),
+        el('button', { class: 'mini', onclick: () => exporterRegistre(liste) }, 'Exporter le registre')));
+    if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun don enregistré en ' + S.anneeDons + '.')); return; }
+    for (const statut of ['à valider', 'validé', 'envoyé', 'antérieur', 'annulé']) {
+      const l = liste.filter(d => d.recu_statut === statut);
+      if (!l.length) continue;
+      zone.append(el('h4', { class: 'p-titre' }, STATUTS_DON[statut] + ' (' + l.length + ')'));
+      for (const d of l) zone.append(ligneDon(d, zone));
+    }
+  }
+
+  function ligneDon(d, zone) {
+    const actions = el('span', { class: 'p-boutons' });
+    if (d.recu_statut === 'à valider') {
+      actions.append(el('button', { class: 'mini', onclick: () => formDon(d) }, 'Modifier'),
+        el('button', { class: 'mini', onclick: () => apercuRecu(d) }, 'Aperçu du reçu'),
+        el('button', { class: 'mini principal', onclick: async () => {
+          if (!confirm('Valider le reçu de ' + d.donateur_nom + ' (' + eur(d.montant) + ') ? Un numéro d\'ordre lui sera attribué et il ne pourra plus être modifié.')) return;
+          const { data: num, error } = await sb.rpc('don_valider', { p_don: d.id });
+          if (error) { toast('Erreur : ' + error.message); return; }
+          toast('Reçu n° ' + num + ' validé.'); dessinerDons(zone);
+        } }, 'Valider le reçu'),
+        el('button', { class: 'mini danger', onclick: async () => {
+          if (!confirm('Supprimer ce don ?')) return;
+          const { error } = await sb.from('dons').delete().eq('id', d.id);
+          if (error) { toast('Erreur : ' + error.message); return; }
+          toast('Don supprimé.'); dessinerDons(zone);
+        } }, 'Supprimer'));
+    } else if (['validé', 'envoyé'].includes(d.recu_statut)) {
+      actions.append(el('button', { class: 'mini', onclick: () => apercuRecu(d) }, 'Voir le reçu'),
+        el('button', { class: 'mini danger', onclick: async () => {
+          const motif = prompt('Motif de l\'annulation du reçu n° ' + d.recu_numero + ' :');
+          if (!motif) return;
+          const { error } = await sb.rpc('don_annuler', { p_don: d.id, p_motif: motif });
+          if (error) { toast('Erreur : ' + error.message); return; }
+          toast('Reçu annulé.'); dessinerDons(zone);
+        } }, 'Annuler le reçu'));
+    }
+    return el('div', { class: 'p-ligne' },
+      el('div', { class: 'p-ligne-nom' }, d.donateur_nom,
+        el('small', {}, [dateFr(d.date_don), d.donateur_type === 'entreprise' ? 'Entreprise' : 'Particulier', d.moyen, d.nature !== 'Numéraire' ? d.nature : null,
+          d.recu_numero ? 'reçu n° ' + d.recu_numero : null].filter(Boolean).join(' · '))),
+      el('div', { class: 'p-ligne-info' }, el('strong', {}, eur(d.montant)), actions));
+  }
+
+  async function formDon(d) {
+    const ent = !d || d.donateur_type === 'entreprise';
+    fenetre(d ? 'Modifier le don' : 'Nouveau don', (f) => {
+      const type = el('select', { class: 'champ' }, el('option', { value: 'entreprise', selected: ent }, 'Entreprise (Cerfa 16216)'),
+        el('option', { value: 'particulier', selected: !ent }, 'Particulier : licencié, parent, autre (Cerfa 11580)'));
+      const selEnt = el('select', { class: 'champ' }, el('option', { value: '' }, 'Entreprise du module Partenaires (facultatif)'),
+        S.entreprises.map(e => el('option', { value: e.id, selected: d && d.entreprise_id === e.id }, e.nom)));
+      const nom = entree(d && d.donateur_nom, { placeholder: 'Raison sociale, ou Nom Prénom' });
+      const siren = entree(d && d.donateur_siren, { placeholder: 'SIREN (entreprise)' });
+      const adr = entree(d && d.donateur_adresse, { placeholder: 'Adresse' });
+      const cp = entree(d && d.donateur_cp, { placeholder: 'Code postal' });
+      const ville = entree(d && d.donateur_ville, { placeholder: 'Ville' });
+      const mail = entree(d && d.donateur_email, { placeholder: 'E-mail (envoi du reçu)', type: 'email' });
+      const montant = entree(d && d.montant, { placeholder: 'Montant en euros', inputmode: 'decimal' });
+      const date = entree(d ? d.date_don : new Date().toISOString().slice(0, 10), { type: 'date' });
+      const sel = (l, v) => el('select', { class: 'champ' }, l.map(x => el('option', { value: x, selected: x === v }, x)));
+      const moyen = sel(MOYENS, d ? d.moyen : 'Chèque'), nature = sel(NATURES, d ? d.nature : 'Numéraire'), forme = sel(FORMES, d ? d.forme : 'Déclaration de don manuel');
+      const desc = zoneTexte(d && d.description, 2); desc.placeholder = 'Don en nature : description et valeur retenue';
+      const com = zoneTexte(d && d.commentaire, 2); com.placeholder = 'Commentaire interne';
+      const zEnt = champ('Entreprise', selEnt), zSiren = champ('SIREN', siren);
+      const maj = () => { const e = type.value === 'entreprise'; zEnt.hidden = !e; zSiren.hidden = !e; };
+      type.onchange = maj; maj();
+      selEnt.onchange = async () => {
+        if (!selEnt.value) return;
+        const { data: e } = await sb.from('part_entreprises').select('nom, adresse, code_postal, ville, email').eq('id', selEnt.value).single();
+        if (!e) return;
+        nom.value = e.nom || ''; adr.value = e.adresse || ''; cp.value = e.code_postal || ''; ville.value = e.ville || ''; if (!mail.value) mail.value = e.email || '';
+      };
+      f.append(champ('Donateur', type), zEnt, champ('Nom', nom), zSiren, champ('Adresse', adr),
+        el('div', { class: 'p-deux' }, champ('Code postal', cp), champ('Ville', ville)), champ('E-mail', mail),
+        el('div', { class: 'p-deux' }, champ('Montant (€)', montant), champ('Date du don', date)),
+        el('div', { class: 'p-deux' }, champ('Mode de paiement', moyen), champ('Nature', nature)), champ('Forme du don', forme),
+        champ('Description (don en nature)', desc), champ('Commentaire', com),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermer }, 'Annuler'),
+          el('button', { class: 'btn principal', onclick: async () => {
+            const m = nombre(montant.value);
+            if (!vide(nom.value) || !m || m <= 0 || !date.value) { toast('Nom, montant et date sont nécessaires.'); return; }
+            const e = type.value === 'entreprise';
+            const ligne = { donateur_type: type.value, entreprise_id: e ? (selEnt.value || null) : null,
+              donateur_nom: e ? vide(nom.value) : casseNom(nom.value), donateur_siren: e ? vide(siren.value.replace(/\s/g, '')) : null,
+              donateur_adresse: vide(adr.value) ? casseAdresse(adr.value) : null, donateur_cp: vide(cp.value), donateur_ville: vide(ville.value) ? casseNom(ville.value) : null,
+              donateur_email: vide(mail.value), montant: m, date_don: date.value, moyen: moyen.value, nature: nature.value, forme: forme.value,
+              description: vide(desc.value), commentaire: vide(com.value), modifie_le: new Date().toISOString() };
+            const { error } = d ? await sb.from('dons').update(ligne).eq('id', d.id)
+                                : await sb.from('dons').insert({ ...ligne, club_id: S.clubId });
+            if (error) { toast('Erreur : ' + error.message); return; }
+            fermer(); toast(d ? 'Don modifié.' : 'Don enregistré : reçu à valider.'); S.vue = 'dons'; S.anneeDons = date.value.slice(0, 4); dessiner();
+          } }, 'Enregistrer')));
+    });
+  }
+
+  // Aperçu du reçu (contenu repris du modèle Cerfa) : le PDF officiel signé viendra à l'étape suivante
+  function apercuRecu(d) {
+    const c = S.club || {}, ent = d.donateur_type === 'entreprise';
+    const l = (t, v) => el('div', { class: 'ligne-joueur' }, el('span', {}, t), el('strong', {}, v || '-'));
+    fenetre((ent ? 'Reçu au titre des dons (entreprise) - Cerfa 16216*01' : 'Reçu au titre des dons (particulier) - Cerfa 11580*05'), (f) => f.append(
+      el('p', { class: 'petit' }, d.recu_numero ? 'Reçu n° ' + d.recu_numero + ' du ' + dateFr(d.recu_date) : 'Aperçu : numéro attribué à la validation'),
+      el('h4', { class: 'p-titre' }, 'Bénéficiaire'),
+      l('Nom', c.nom_officiel), l('Adresse', [c.siege_adresse, c.siege_cp, c.siege_ville].filter(Boolean).join(', ')),
+      l('RNA', c.rna), l('SIRET', c.siret), l('Objet', c.objet), l('Qualité', 'Œuvre ou organisme d\'intérêt général (à confirmer par le trésorier)'),
+      el('h4', { class: 'p-titre' }, ent ? 'Entreprise donatrice' : 'Donateur'),
+      l(ent ? 'Dénomination' : 'Nom et prénom', d.donateur_nom), ent ? l('SIREN', d.donateur_siren) : null,
+      l('Adresse', [d.donateur_adresse, d.donateur_cp, d.donateur_ville].filter(Boolean).join(', ')),
+      el('h4', { class: 'p-titre' }, 'Don'),
+      l('Montant', eur(d.montant)), l('Date du versement', dateFr(d.date_don)), l('Nature', d.nature), l('Forme', d.forme), l('Mode de versement', d.moyen),
+      d.description ? l('Description', d.description) : null,
+      l('Signataire', [c.recu_signataire, c.recu_qualite].filter(Boolean).join(', ')),
+      el('p', { class: 'petit' }, 'Le PDF officiel, avec signature et tampon, et son envoi par e-mail arrivent à l\'étape suivante.'),
+      el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermer }, 'Fermer'))));
+  }
+
+  function exporterRegistre(liste) {
+    const lignes = [['N° de reçu', 'Date du reçu', 'Statut', 'Type', 'Donateur', 'SIREN', 'Adresse', 'Code postal', 'Ville', 'Montant', 'Date du don', 'Mode', 'Nature', 'Commentaire']];
+    for (const d of [...liste].sort((a, b) => (a.recu_numero || 'z').localeCompare(b.recu_numero || 'z') || a.date_don.localeCompare(b.date_don)))
+      lignes.push([d.recu_numero || '', dateFr(d.recu_date), STATUTS_DON[d.recu_statut], d.donateur_type, d.donateur_nom, d.donateur_siren || '', d.donateur_adresse || '',
+        d.donateur_cp || '', d.donateur_ville || '', String(d.montant).replace('.', ','), dateFr(d.date_don), d.moyen, d.nature, d.commentaire || '']);
+    const csv = '\ufeff' + lignes.map(r => r.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+    const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'Registre des dons ' + S.anneeDons + '.csv' });
+    document.body.append(a); a.click(); a.remove();
   }
 
   return { initialiser, afficher };
