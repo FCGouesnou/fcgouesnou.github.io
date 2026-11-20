@@ -5,8 +5,10 @@
   Rôle : application du pilote Espace équipes - connexion, écran « À venir »,
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
-  Fichiers liés : espace/partenaires.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.13.6 - 17/11/2026 - Partenaires 1.9 (archivage des entreprises)
+  Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
+  Version : 0.14 - 20/11/2026 - onglet « Attestations » (trésorier, secrétaire, administrateurs) : demandes
+           d'attestation de licence, contrôle, actions du bureau, licences de la saison (module attestations.js 1.0)
+           0.13.6 - 17/11/2026 - Partenaires 1.9 (archivage des entreprises)
            0.13.5 - 17/11/2026 - Partenaires 1.8 (rôle « secrétariat » : dons et reçus fiscaux)
            0.13.4 - 17/11/2026 - Partenaires 1.7 (envoi des reçus fiscaux par e-mail)
            0.13.3 - 17/11/2026 - Partenaires 1.6 (reçus fiscaux en PDF signés)
@@ -291,7 +293,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.13.6 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.14 - pilote</p>
     </main>
   </div>
 
@@ -313,13 +315,15 @@
         <button class="onglet actif" data-vue="avenir">À venir</button>
         <button class="onglet" data-vue="coach" hidden>Mes équipes</button>
         <button class="onglet" data-vue="partenaires" hidden>Partenaires</button>
+        <button class="onglet" data-vue="attestations" hidden>Attestations</button>
         <button class="onglet" data-vue="frais" hidden>Frais des coachs</button>
       </div>
       <div id="vueAvenir"></div>
       <div id="vueCoach" hidden></div>
       <div id="vuePartenaires" hidden></div>
+      <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.13.6 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.14 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -330,6 +334,7 @@
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=1.9';
+    import { initAttestations } from './attestations.js?v=1.0';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -527,11 +532,14 @@
 
     // ---------- Affichage ----------
     let vue = 'avenir';
-    let P = null, partenairesOk = false;
+    let P = null, partenairesOk = false, A = null, attestationsOk = false;
     async function preparerPartenaires() {
       if (!P) P = initPartenaires({ sb, el, toast });
       partenairesOk = await P.initialiser();
       document.querySelector('.onglet[data-vue="partenaires"]').hidden = !partenairesOk;
+      if (!A) A = initAttestations({ sb, el, toast });
+      attestationsOk = await A.initialiser();
+      document.querySelector('.onglet[data-vue="attestations"]').hidden = !attestationsOk;
       afficher();
     }
     function afficher() {
@@ -542,11 +550,12 @@
       const fraisOk = AP.suisAdmin && !AP.actif;
       document.querySelector('.onglet[data-vue="frais"]').hidden = !fraisOk;
       if (vue === 'frais' && !fraisOk) vue = 'avenir';
-      $('onglets').hidden = !coach && !partenairesOk && !fraisOk;
+      $('onglets').hidden = !coach && !partenairesOk && !fraisOk && !attestationsOk;
       $('btnNouvel').hidden = !coach || vue !== 'coach';
       $('vueAvenir').hidden = vue !== 'avenir';
       $('vueCoach').hidden = vue !== 'coach';
       $('vuePartenaires').hidden = vue !== 'partenaires';
+      $('vueAttestations').hidden = vue !== 'attestations';
       $('vueFrais').hidden = vue !== 'frais';
       afficherAvenir();
       if (coach) afficherCoach();
@@ -556,6 +565,7 @@
       document.querySelectorAll('#onglets .onglet').forEach(x => x.classList.toggle('actif', x === b));
       afficher();
       if (vue === 'partenaires' && P) P.afficher($('vuePartenaires'));
+      if (vue === 'attestations' && A) A.afficher($('vueAttestations'));
       if (vue === 'frais') afficherFrais();
     });
 
@@ -1259,7 +1269,7 @@
       document.querySelectorAll('#onglets .onglet').forEach(x => x.classList.toggle('actif', x.dataset.vue === 'avenir'));
     }
     async function relancerVue() {
-      P = null; partenairesOk = false;
+      P = null; partenairesOk = false; A = null; attestationsOk = false;
       revenirAvenir();
       await charger(); majCarteNotif(); majCarteSportEasy(); await preparerPartenaires();
     }
