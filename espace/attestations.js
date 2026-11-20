@@ -6,7 +6,9 @@
          refuser), et vue des licences de la saison (cotisations).
          Les demandes et les licences sont chargées chaque heure par l'Espace club (Apps Script,
          « 11 - Attestations Espace club.gs ») et la fonction Edge « attestations ».
-  Version : 1.0.1 - 20/11/2026 - bouton « C'est bien ce licencié » quand le licencié est retrouvé avec un doute
+  Version : 1.1 - 20/11/2026 - PDF signé et envoi (fonction Edge « attestations » 2.0) : « Aperçu », « Envoyer »,
+            envoi immédiat après confirmation du paiement ou du licencié, « PDF », « Renvoyer », refus avec mail
+            1.0.1 - 20/11/2026 - bouton « C'est bien ce licencié » quand le licencié est retrouvé avec un doute
             1.0 - 20/11/2026 - première version (étape 2 : sans PDF ni envoi)
 ===================================================================== */
 export function initAttestations(ctx) {
@@ -32,8 +34,38 @@ export function initAttestations(ctx) {
     const { error } = await sb.rpc(nom, params);
     if (error) { toast('Erreur : ' + error.message); return false; }
     if (ok) toast(ok);
-    await charger(); dessiner();
+    await charger();
+    // Confirmation humaine (paiement ou licencié) : la demande prête part tout de suite
+    const d = S.demandes.find(x => x.id === params.p_id);
+    if (d && d.statut === 'prête' && ['attestation_confirmer', 'attestation_rattacher'].includes(nom)) await envoyer(d, true);
+    else dessiner();
     return true;
+  }
+  async function edge(corps) {
+    const { data, error } = await sb.functions.invoke('attestations', { body: corps });
+    let msg = data && data.erreur;
+    if (error && !msg) { try { msg = (await error.context.json()).erreur; } catch (e) { msg = error.message; } }
+    return { data, msg };
+  }
+  async function envoyer(d, auto) {
+    if (!auto && !confirm('Envoyer l\'attestation à ' + d.demandeur_email + ' (copie au trésorier et au secrétaire) ?')) return;
+    toast('Envoi de l\'attestation...');
+    const { data, msg } = await edge({ action: 'envoyer', id: d.id });
+    if (msg) toast('Envoi impossible : ' + msg); else toast('Attestation n° ' + data.numero + ' envoyée à ' + data.email + '.');
+    await charger(); dessiner();
+  }
+  async function ouvrirPdf(d, action) {
+    const w = window.open('', '_blank');
+    if (w) w.document.write('<p style="font-family:sans-serif;padding:1em">Préparation de l\'attestation...</p>');
+    const { data, msg } = await edge({ action, id: d.id });
+    if (msg || !data || !data.url) { if (w) w.close(); toast('Attestation indisponible : ' + (msg || 'erreur inconnue')); return; }
+    if (w) w.location.href = data.url; else location.href = data.url;
+  }
+  async function renvoyer(d) {
+    const email = prompt('Renvoyer l\'attestation n° ' + d.numero + ' à l\'adresse :', d.envoyee_a || d.demandeur_email || '');
+    if (email === null) return;
+    const { data, msg } = await edge({ action: 'renvoyer', id: d.id, email: email.trim() });
+    if (msg) toast('Envoi impossible : ' + msg); else { toast('Attestation renvoyée à ' + data.email + '.'); await charger(); dessiner(); }
   }
 
   // ---------- Chargement ----------
@@ -82,7 +114,8 @@ export function initAttestations(ctx) {
       el('div', {}, el('strong', {}, String(n('refusée') + n('annulée'))), el('span', {}, 'refusées ou closes'))));
     zone.append(el('p', { class: 'petit' }, 'Demandes du formulaire du site, reprises chaque heure, et demandes saisies ici. ' +
       'Une demande est « prête » quand le licencié est retrouvé (nom, prénom, date de naissance) et que sa cotisation est payée dans SportEasy. ' +
-      'Montant : total réglé (licence et survêtement). L\'envoi des attestations sera ouvert à l\'étape suivante.'));
+      'Montant : total réglé (licence et survêtement). Les demandes prêtes partent automatiquement chaque heure (sauf en mai), depuis contact@, avec copie au trésorier et au secrétaire ; ' +
+      'une confirmation du paiement ou du licencié envoie l\'attestation aussitôt.'));
     const recherche = entree(S.q, { placeholder: 'Rechercher un nom, un demandeur, un numéro' });
     const filtres = { 'à traiter': 'À traiter', 'envoyées': 'Envoyées', 'refusées': 'Refusées et closes', 'toutes': 'Toutes' };
     const sel = el('select', { class: 'champ' }, Object.entries(filtres).map(([v, t]) => el('option', { value: v, selected: v === S.filtre }, t)));
@@ -115,6 +148,10 @@ export function initAttestations(ctx) {
       actions.append(el('button', { class: 'mini', onclick: () => clore(d) }, 'Clore'),
         el('button', { class: 'mini danger', onclick: () => refuser(d) }, 'Refuser'));
     }
+    if (ouverte && d.numero_personne && d.montant != null) actions.append(el('button', { class: 'mini', onclick: () => ouvrirPdf(d, 'apercu') }, 'Aperçu'));
+    if (d.statut === 'prête') actions.prepend(el('button', { class: 'mini principal', onclick: () => envoyer(d, false) }, 'Envoyer'));
+    if (d.statut === 'envoyée') actions.append(el('button', { class: 'mini', onclick: () => ouvrirPdf(d, 'pdf') }, 'PDF'),
+      el('button', { class: 'mini', onclick: () => renvoyer(d) }, 'Renvoyer'));
     actions.append(el('button', { class: 'mini', onclick: () => { histo.hidden = !histo.hidden; } }, 'Historique'));
     return el('div', { class: 'evt' },
       el('div', { class: 'p-ligne-info' },
@@ -162,8 +199,8 @@ export function initAttestations(ctx) {
     if (v === null) return;
     const m = Number(String(v).replace(/\s/g, '').replace(',', '.'));
     if (!(m > 0)) { toast('Montant invalide.'); return; }
-    if (!confirm('Confirmer que la cotisation de ' + eur(m) + ' a bien été encaissée ? Pensez à la noter aussi dans SportEasy.')) return;
-    await action('attestation_confirmer', { p_id: d.id, p_montant: m }, 'Paiement confirmé : la demande est prête.');
+    if (!confirm('Confirmer que la cotisation de ' + eur(m) + ' a bien été encaissée ? L\'attestation partira aussitôt à ' + (d.demandeur_email || '?') + '. Pensez à noter le paiement dans SportEasy.')) return;
+    await action('attestation_confirmer', { p_id: d.id, p_montant: m }, 'Paiement confirmé.');
   }
   async function clore(d) {
     const motif = prompt('Clore cette demande sans envoyer d\'attestation (doublon, demande sans objet...). Motif :', 'Doublon');
@@ -171,9 +208,12 @@ export function initAttestations(ctx) {
     await action('attestation_clore', { p_id: d.id, p_motif: motif }, 'Demande close.');
   }
   async function refuser(d) {
-    const motif = prompt('Motif du refus (il sera communiqué au demandeur) :', 'Nous n\'avons pas trouvé les informations nécessaires à la délivrance de cette attestation. Merci de nous contacter par la rubrique « Nous contacter » du site.');
+    const motif = prompt('Motif du refus (il sera envoyé par mail au demandeur' + (d.demandeur_email ? ', ' + d.demandeur_email : '') + ') :', 'Nous n\'avons pas trouvé les informations nécessaires à la délivrance de cette attestation. Merci de nous contacter par la rubrique « Nous contacter » du site.');
     if (motif === null) return;
-    await action('attestation_refuser', { p_id: d.id, p_motif: motif }, 'Demande refusée. Pendant cette étape, le demandeur n\'est pas encore prévenu automatiquement.');
+    const { data, msg } = await edge({ action: 'refuser', id: d.id, motif });
+    if (msg) { toast('Erreur : ' + msg); return; }
+    toast(data.prevenu ? 'Demande refusée, demandeur prévenu.' : 'Demande refusée.');
+    await charger(); dessiner();
   }
 
   // Saisie d'une demande reçue autrement (mail, au club)

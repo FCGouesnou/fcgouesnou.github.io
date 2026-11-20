@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.14 - 20/11/2026 - onglet « Attestations » (trésorier, secrétaire, administrateurs) : demandes
+  Version : 0.14.1 - 20/11/2026 - Attestations 1.1 (PDF signé et envoi par e-mail)
+           0.14 - 20/11/2026 - onglet « Attestations » (trésorier, secrétaire, administrateurs) : demandes
            d'attestation de licence, contrôle, actions du bureau, licences de la saison (module attestations.js 1.0)
            0.13.6 - 17/11/2026 - Partenaires 1.9 (archivage des entreprises)
            0.13.5 - 17/11/2026 - Partenaires 1.8 (rôle « secrétariat » : dons et reçus fiscaux)
@@ -293,7 +294,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.14 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.14.1 - pilote</p>
     </main>
   </div>
 
@@ -323,7 +324,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.14 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.14.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -334,7 +335,7 @@
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=1.9';
-    import { initAttestations } from './attestations.js?v=1.0.1';
+    import { initAttestations } from './attestations.js?v=1.1';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
