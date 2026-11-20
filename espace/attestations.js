@@ -6,7 +6,8 @@
          refuser), et vue des licences de la saison (cotisations).
          Les demandes et les licences sont chargées chaque heure par l'Espace club (Apps Script,
          « 11 - Attestations Espace club.gs ») et la fonction Edge « attestations ».
-  Version : 1.0 - 20/11/2026 - première version (étape 2 : sans PDF ni envoi)
+  Version : 1.0.1 - 20/11/2026 - bouton « C'est bien ce licencié » quand le licencié est retrouvé avec un doute
+            1.0 - 20/11/2026 - première version (étape 2 : sans PDF ni envoi)
 ===================================================================== */
 export function initAttestations(ctx) {
   const { sb, el, toast } = ctx;
@@ -107,8 +108,10 @@ export function initAttestations(ctx) {
       (d.historique || []).slice().reverse().map(h => el('div', {}, dateFr((h.le || '').slice(0, 10)) + ' - ' + h.quoi)));
     const actions = el('div', { class: 'actions-coach' });
     if (ouverte) {
+      if (d.numero_personne && d.rapprochement === 'à vérifier' && lic) actions.append(el('button', { class: 'mini principal', onclick: () =>
+        action('attestation_rattacher', { p_id: d.id, p_numero: d.numero_personne }, 'Licencié confirmé : ' + lic.nom + ' ' + lic.prenom + '.') }, 'C\'est bien ce licencié'));
       actions.append(el('button', { class: 'mini', onclick: () => formRattacher(d) }, d.numero_personne ? 'Changer de licencié' : 'Rattacher au licencié'));
-      if (d.numero_personne && d.statut !== 'prête') actions.append(el('button', { class: 'mini principal', onclick: () => confirmerPaiement(d, lic) }, 'Confirmer le paiement'));
+      if (d.numero_personne && d.statut !== 'prête' && d.rapprochement !== 'à vérifier') actions.append(el('button', { class: 'mini principal', onclick: () => confirmerPaiement(d, lic) }, 'Confirmer le paiement'));
       actions.append(el('button', { class: 'mini', onclick: () => clore(d) }, 'Clore'),
         el('button', { class: 'mini danger', onclick: () => refuser(d) }, 'Refuser'));
     }
