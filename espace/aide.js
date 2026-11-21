@@ -160,7 +160,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     ] },
   ];
   // Version des captures : à changer à chaque régénération, pour contourner le cache des téléphones
-  const IMAGES_VERSION = '0.38';
+  const IMAGES_VERSION = '0.39';
   function galerie(liste) {
     if (!liste || !liste.length) return null;
     return el('div', { class: 'aide-captures' }, liste.map(([nom, legende]) => {

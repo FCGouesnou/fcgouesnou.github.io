@@ -12,7 +12,8 @@
          - Statistiques : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs
            de la saison. Toute l'équipe pour les coachs, administrateurs et présidents ; chaque joueur et sa
            famille seulement pour lui (contrôlé par la base : fonctions match_direct et stats_equipe).
-  Version : 1.4 - 21/11/2026 - listes du direct : « Sur le terrain » puis « Remplaçants » une fois la composition enregistrée ; remplacement : sortant parmi le terrain, entrant parmi les remplaçants
+  Version : 1.5 - 21/11/2026 - composition : titulaires et remplaçants choisis dès le départ (match_groupe_enregistrer)
+            1.4 - 21/11/2026 - listes du direct : « Sur le terrain » puis « Remplaçants » une fois la composition enregistrée ; remplacement : sortant parmi le terrain, entrant parmi les remplaçants
             1.3 - 21/11/2026 - listes de joueurs limitées aux convoqués non absents (toute l'équipe sur demande dans la composition) ; titulaires en vert
             1.2 - 21/11/2026 - photos du match (dépôt, validation par l'encadrement, visionneuse)
             1.1 - 21/11/2026 - matchs sans heure (minuit, « Horaire à confirmer ») : pas de minute calculée, statut « Jour de match »
@@ -104,32 +105,42 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
             } }, '×') : null));
         }
         corps.append(fil);
-        // Composition de départ
+        // Composition : titulaires (temps de jeu depuis le coup d'envoi) et remplaçants choisis dès le départ
         const tit = new Set(d.titulaires);
-        const compo = el('details', { class: 'aide-rubrique' }, el('summary', {}, 'Composition de départ (' + tit.size + ')'));
+        const remp = new Set(d.remplacants || []);
+        const compo = el('details', { class: 'aide-rubrique' }, el('summary', {}, 'Composition (' + tit.size + ' titulaire' + (tit.size > 1 ? 's' : '') + (remp.size ? ' + ' + remp.size + ' remplaçant' + (remp.size > 1 ? 's' : '') : '') + ')'));
         if (saisie) {
           let toute = false;
           const puces = el('div', { class: 'raci-filtres direct-compo' });
-          const choix = new Set(tit);
+          const etat = new Map([...tit].map(id => [id, 't']).concat([...remp].map(id => [id, 'r'])));
           const bascule = el('button', { class: 'lien-mini' });
+          const compte = el('p', { class: 'petit compo-compte' });
           const dessinerPuces = () => {
-            puces.replaceChildren(...proposes(toute).map(j => el('button', {
-              class: 'raci-puce' + (choix.has(j.id) ? ' actif' : ''),
-              onclick: () => { choix.has(j.id) ? choix.delete(j.id) : choix.add(j.id); dessinerPuces(); } },
-              (choix.has(j.id) ? '✓ ' : '') + j.nom + (j.reponse === 'absent' ? ' (absent)' : !j.reponse ? ' (non convoqué)' : ''))));
+            puces.replaceChildren(...proposes(toute).map(j => {
+              const e = etat.get(j.id);
+              return el('button', {
+                class: 'raci-puce' + (e === 't' ? ' actif' : e === 'r' ? ' remp' : ''),
+                onclick: () => { const x = etat.get(j.id); x === 't' ? etat.set(j.id, 'r') : x === 'r' ? etat.delete(j.id) : etat.set(j.id, 't'); dessinerPuces(); } },
+                (e === 't' ? '✓ ' : e === 'r' ? 'R · ' : '') + j.nom + (j.reponse === 'absent' ? ' (absent)' : !j.reponse ? ' (non convoqué)' : ''));
+            }));
+            const nt = [...etat.values()].filter(v => v === 't').length, nr = [...etat.values()].filter(v => v === 'r').length;
+            compte.textContent = nt + ' titulaire' + (nt > 1 ? 's' : '') + ' · ' + nr + ' remplaçant' + (nr > 1 ? 's' : '');
             bascule.textContent = toute ? 'Ne montrer que les convoqués' : 'Afficher toute l\'équipe';
           };
           bascule.onclick = () => { toute = !toute; dessinerPuces(); };
           dessinerPuces();
           compo.append(el('div', { class: 'aide-texte' },
-            el('p', { class: 'petit' }, 'Touchez les joueurs convoqués qui commencent le match (en vert) : le temps de jeu en dépend. ', bascule), puces,
+            el('p', { class: 'petit' }, 'Touchez un joueur : 1 fois = titulaire (vert), 2 fois = remplaçant (orange), 3 fois = retiré. Le temps de jeu d\'un remplaçant compte à partir de son entrée (bouton « Remplacement »). ', bascule),
+            puces, compte,
             el('button', { class: 'mini principal', onclick: async () => {
-              const { error: e3 } = await sb.rpc('match_titulaires_enregistrer', { ev, p_ids: [...choix] });
+              const t = [...etat].filter(([, v]) => v === 't').map(([k]) => k), r = [...etat].filter(([, v]) => v === 'r').map(([k]) => k);
+              const { error: e3 } = await sb.rpc('match_groupe_enregistrer', { ev, p_titulaires: t, p_remplacants: r });
               if (e3) { erreur(e3); return; }
-              toast(choix.size + ' titulaire(s) enregistré(s).'); await recharger();
+              toast(t.length + ' titulaire(s) et ' + r.length + ' remplaçant(s) enregistrés.'); await recharger();
             } }, 'Enregistrer la composition')));
         } else {
-          compo.append(el('div', { class: 'aide-texte' }, tit.size ? d.joueurs.filter(j => tit.has(j.id)).map(j => j.nom).join(', ') : 'Pas encore renseignée.'));
+          compo.append(el('div', { class: 'aide-texte' }, tit.size ? 'Titulaires : ' + d.joueurs.filter(j => tit.has(j.id)).map(j => j.nom).join(', ')
+            + (remp.size ? '. Remplaçants : ' + d.joueurs.filter(j => remp.has(j.id)).map(j => j.nom).join(', ') : '') + '.' : 'Pas encore renseignée.'));
         }
         corps.append(compo);
         // Délégué du jour (coachs)
@@ -179,12 +190,16 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
         }
         const opt = (j) => el('option', { value: j.id }, j.nom + (j.reponse === 'absent' ? ' (absent)' : ''));
         // groupe : 'tous' (sur le terrain puis remplaçants), 'terrain' ou 'banc'
+        const rempl = new Set(d.remplacants || []);
         const selJ = (vide, groupe = 'tous') => {
-          const sur = joueurs.filter(j => terrain.has(j.id)), banc = joueurs.filter(j => !terrain.has(j.id));
+          const sur = joueurs.filter(j => terrain.has(j.id));
+          const banc = joueurs.filter(j => !terrain.has(j.id) && (!rempl.size || rempl.has(j.id)));
+          const autres = rempl.size ? joueurs.filter(j => !terrain.has(j.id) && !rempl.has(j.id)) : [];
           const s = el('select', { class: 'champ' }, el('option', { value: '' }, vide));
           if (!terrain.size) { joueurs.forEach(j => s.append(opt(j))); return s; }
           if (groupe !== 'banc' && sur.length) s.append(el('optgroup', { label: 'Sur le terrain' }, sur.map(opt)));
           if (groupe !== 'terrain' && banc.length) s.append(el('optgroup', { label: 'Remplaçants' }, banc.map(opt)));
+          if (groupe !== 'terrain' && autres.length) s.append(el('optgroup', { label: 'Autres convoqués' }, autres.map(opt)));
           return s;
         };
         const m = minuteCourante(d);
