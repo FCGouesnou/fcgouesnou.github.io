@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.20 - 21/11/2026 - Partenaires 2.1 (dons réservés au bureau : demande par la commission, avis par e-mail)
+  Version : 0.21 - 21/11/2026 - bouton « ? » : aide adaptée au profil connecté (module aide.js), onglet « RACI du bureau »
+            0.20 - 21/11/2026 - Partenaires 2.1 (dons réservés au bureau : demande par la commission, avis par e-mail)
             0.19 - 21/11/2026 - Partenaires 2.0 (identité légale des entreprises pour les reçus fiscaux)
            0.18 - 21/11/2026 - look « Nuit de match » étendu à tous les écrans : Mes équipes, Partenaires,
            Attestations, Frais des coachs, Mises à jour SportEasy et fenêtres (tuiles, listes, onglets, champs)
@@ -355,6 +356,29 @@
     .entete #btnApercu { margin-left: auto; }
     @media (min-width: 760px) { .entete { flex-wrap: nowrap; padding-left: max(16px, calc((100vw - 1180px) / 2)); padding-right: max(16px, calc((100vw - 1180px) / 2)); }
       .entete h2 { flex: 1 1 auto; } .entete #btnApercu { margin-left: 0; } }
+    /* Aide et RACI */
+    .entete #btnAide { width: 36px; padding: 0; border-radius: 50%; font-family: Sora, Inter, sans-serif; font-weight: 700; font-size: 1rem; }
+    .aide-rubrique { background: #fff; border: 1px solid #e3e9f6; border-radius: 14px; margin: 8px 0; padding: 0 14px; }
+    .aide-rubrique > summary { cursor: pointer; padding: 12px 0; font-family: Sora, Inter, sans-serif; font-weight: 600; color: var(--marine); list-style: none; }
+    .aide-rubrique > summary::-webkit-details-marker { display: none; }
+    .aide-rubrique > summary::after { content: '+'; float: right; font-weight: 700; color: var(--bleu); }
+    .aide-rubrique[open] > summary::after { content: '-'; }
+    .aide-texte { padding-bottom: 12px; font-size: .92rem; line-height: 1.5; }
+    .aide-texte p { margin: 6px 0; } .aide-texte ul { margin: 6px 0; padding-left: 20px; } .aide-texte li { margin: 4px 0; }
+    .raci-filtres { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    .raci-puce { background: #eef3fc; color: var(--marine); border: 0; border-radius: 999px; padding: 7px 12px; font-size: .82rem; min-height: 32px; cursor: pointer; }
+    .raci-puce.actif { background: var(--marine); color: #fff; }
+    .raci-domaine { font-family: Sora, Inter, sans-serif; color: var(--marine); margin: 16px 0 6px; font-size: .95rem; }
+    .raci-liste { display: grid; gap: 8px; }
+    .raci-carte { background: #fff; border: 1px solid #e3e9f6; border-radius: 14px; padding: 12px 14px; }
+    .raci-activite { font-weight: 600; margin-bottom: 8px; }
+    .raci-lignes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: .88rem; }
+    .raci-ligne { display: flex; gap: 8px; align-items: flex-start; border-radius: 8px; padding: 2px 4px; }
+    .raci-ligne.moi { background: #fff4d6; }
+    .raci-lettre { flex: none; width: 22px; height: 22px; border-radius: 6px; color: #fff; font-weight: 700; font-size: .78rem; display: inline-flex; align-items: center; justify-content: center; }
+    .raci-r { background: #10235c; } .raci-a { background: #c0392b; } .raci-c { background: #2f80ed; } .raci-i { background: #8a94a6; }
+    .raci-precision { margin-top: 8px; }
+    @media (max-width: 480px) { .raci-lignes { grid-template-columns: 1fr; } }
     /* Grand écran : plus large, cartes sur plusieurs colonnes */
     @media (min-width: 1000px) {
       .contenu { max-width: 1180px; padding-left: 20px; padding-right: 20px; }
@@ -491,7 +515,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.20 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.21 - pilote</p>
     </main>
   </div>
 
@@ -501,6 +525,7 @@
       <img class="logo-entete" src="../images/logo-fcg.png" alt="">
       <h2>Ici c'est Gouez<small>Espace club FC Gouesnou</small></h2>
       <button id="btnApercu" title="Voir l'application comme une autre personne" hidden>Voir en tant que</button>
+      <button id="btnAide" title="Aide" aria-label="Aide">?</button>
       <button id="btnActualiser" title="Actualiser">Actualiser</button>
       <button id="btnSortir">Sortir</button>
     </header>
@@ -521,7 +546,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.20 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.21 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -533,6 +558,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=2.1';
     import { initAttestations } from './attestations.js?v=1.1';
+    import { initAide } from './aide.js?v=1.0';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -1802,6 +1828,13 @@
       });
     }
     $('btnApercu').addEventListener('click', choisirApercu);
+
+    // ---------- Aide (bouton « ? ») : rubriques selon le profil, onglet affiché ouvert d'office ----------
+    const aide = initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte: () => {
+      const famille = [...E.personnes.values()].some(x => x.enfant);
+      return { coach: E.coachees.size > 0, famille, joueur: !famille && [...E.miennes].some(id => !E.coachees.has(id)), vue, apercu: !!AP.actif };
+    } });
+    $('btnAide').addEventListener('click', () => aide.ouvrir());
     async function verifierAdmin() {
       const { data } = await sbReel.rpc('mes_roles');
       AP.suisAdmin = (data || []).some(r => r.role === 'admin');
