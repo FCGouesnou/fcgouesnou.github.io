@@ -9,7 +9,8 @@
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
          Captures d'écran (dossier espace/aide, images WebP) : produites à partir de la vraie application
          avec des données fictives, régénérées à chaque version qui change l'apparence (IMAGES_VERSION).
-  Version : 1.7 - 21/11/2026 - photos du match dans la rubrique du direct
+  Version : 1.8 - 21/11/2026 - bouton « Matchs passés »
+            1.7 - 21/11/2026 - photos du match dans la rubrique du direct
             1.6 - 21/11/2026 - captures d'écran dans les rubriques (touchez une image pour l'agrandir)
             1.5 - 21/11/2026 - onglet « Signaler » : bug, évolution ou question, avec captures d'écran, suivi des demandes
             1.4 - 21/11/2026 - rubrique « Direct du match et statistiques »
@@ -84,6 +85,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         ? 'Les vôtres sont visibles tout de suite ; celles des familles attendent votre accord : « Valider » ou « Refuser » (vous êtes prévenu par notification).'
         : 'Elles sont visibles de l\'équipe après validation du coach ; vous pouvez supprimer les vôtres tant qu\'elles ne sont pas validées.',
         ' Les photos sont réservées à l\'équipe et au club, et copiées chaque nuit dans le Drive photos du club.'),
+      P(B('⏮ Matchs passés'), ' (en haut de « À venir » et de « Mes équipes ») : retrouvez le direct, les photos et la composition des matchs déjà joués, sur les quatre derniers mois.'),
     ] },
     { id: 'equipes', titre: 'Mes équipes (coachs et dirigeants)', vues: ['coach'], pour: (p) => p.coach, captures: () => [['mes-equipes', 'Réponses détaillées, relance et modification']], contenu: () => [
       P('L\'onglet « Mes équipes » montre quatre semaines d\'événements avec les réponses détaillées, motifs compris.'),
@@ -156,7 +158,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     ] },
   ];
   // Version des captures : à changer à chaque régénération, pour contourner le cache des téléphones
-  const IMAGES_VERSION = '0.35';
+  const IMAGES_VERSION = '0.37';
   function galerie(liste) {
     if (!liste || !liste.length) return null;
     return el('div', { class: 'aide-captures' }, liste.map(([nom, legende]) => {

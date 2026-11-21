@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.36 - 21/11/2026 - modules chargés à la demande : Partenaires et Attestations seulement pour les rôles concernés, aide et direct au premier usage
+  Version : 0.37 - 21/11/2026 - bouton « Matchs passés » (À venir et Mes équipes) : direct, photos et composition des matchs déjà joués
+            0.36 - 21/11/2026 - modules chargés à la demande : Partenaires et Attestations seulement pour les rôles concernés, aide et direct au premier usage
             0.35 - 21/11/2026 - photos du match (bouton « 📷 Photos » du direct) : dépôt par l'équipe, validation par l'encadrement
             0.34.1 - 21/11/2026 - iPhone : plus de zoom automatique en touchant un champ (écran trop large après une saisie)
             0.34 - 21/11/2026 - aide illustrée : captures d'écran dans les rubriques, agrandissables
@@ -688,7 +689,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     // Modules chargés à la demande (seulement pour les rôles concernés, ou au premier usage) :
     // un parent ne télécharge jamais les modules Partenaires et Attestations.
-    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.7', match: './match.js?v=1.2' };
+    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.8', match: './match.js?v=1.2' };
     const ROLES_PARTENAIRES = ['admin', 'codir', 'partenaires', 'secretariat', 'finances'];
     const ROLES_ATTESTATIONS = ['admin', 'finances', 'secretariat'];
 
@@ -699,7 +700,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.36';
+    const VERSION_APPLI = '0.37';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -1605,6 +1606,7 @@
       const mesEvt = new Set(E.convocations.map(c => c.evenement_id));
       const liste = E.evenements.filter(aVenir).filter(e => mesEvt.has(e.id) || (E.coachees.has(e.equipe_id) && E.miennes.has(e.equipe_id)));
       if (!E.fiches.length) { zone.append(el('p', { class: 'vide' }, "Votre compte n'est relié à aucune fiche du club. Contactez-nous par la rubrique « Nous contacter » du site.")); return; }
+      if (E.miennes.size || E.coachees.size) zone.append(el('div', { class: 'taches-equipes' }, boutonMatchsPasses()));
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir pour le moment.')); return; }
       // Le prochain match (non annulé) est mis en vedette, puis retiré de la liste
       const prochain = liste.find(e => estMatch(e) && e.etat !== 'annule' && (new Date(e.debut) > new Date(Date.now() - 2 * 3600 * 1000) || (sansHeure(e) && cleJour(e.debut) === cleJour(new Date()))));
@@ -1620,6 +1622,34 @@
       }
     }
 
+    // ---------- Matchs passés : direct, photos et score des matchs déjà joués (120 derniers jours) ----------
+    function boutonMatchsPasses() {
+      return el('button', { class: 'mini principal', onclick: ouvrirMatchsPasses }, '⏮ Matchs passés');
+    }
+    async function ouvrirMatchsPasses() {
+      const ids = [...new Set([...E.miennes, ...E.coachees])];
+      const depuis = new Date(Date.now() - 120 * 86400 * 1000).toISOString();
+      const { data, error } = await sb.from('evenements').select('id, debut, equipe_id, adversaire, domicile, titre, type, etat')
+        .in('equipe_id', ids).in('type', ['match', 'tournoi']).neq('etat', 'annule')
+        .gte('debut', depuis).lt('debut', new Date().toISOString()).order('debut', { ascending: false }).limit(60);
+      if (error) { toast('Erreur : ' + error.message); return; }
+      ouvrirFenetre('Matchs passés', (f) => {
+        f.append(el('p', { class: 'petit' }, 'Touchez un match pour retrouver son direct, ses photos et sa composition.'));
+        if (!data.length) { f.append(el('p', { class: 'vide' }, 'Aucun match joué ces quatre derniers mois.')); }
+        let mois = '';
+        for (const m of data) {
+          const mo = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, month: 'long', year: 'numeric' }).format(new Date(m.debut));
+          if (mo !== mois) { mois = mo; f.append(el('h4', { class: 'p-titre' }, mo.charAt(0).toUpperCase() + mo.slice(1))); }
+          const eq = (E.equipes.get(m.equipe_id) || {}).nom || '';
+          f.append(el('button', { class: 'p-ligne', onclick: () => MT.ouvrirDirect(m.id) },
+            el('div', { class: 'p-ligne-nom' }, eq + (m.adversaire ? (m.domicile === false ? ' chez ' : ' contre ') + m.adversaire : ''),
+              el('small', {}, jourDe(m.debut) + (m.titre ? ' · ' + m.titre : ''))),
+            el('span', { class: 'stats-res nd' }, '⚽ 📷')));
+        }
+        f.append(el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+      });
+    }
+
     // ---------- Vue coach ----------
     async function afficherCoach() {
       const zone = $('vueCoach'); zone.replaceChildren();
@@ -1627,8 +1657,8 @@
       // Tâches de match de chaque équipe coachée (lavage, matériel, vestiaire...)
       const eqs = [...E.coachees].map(id => E.equipes.get(id)).filter(Boolean);
       if (eqs.length) zone.append(el('div', { class: 'taches-equipes' },
-        eqs.flatMap(q => [el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom),
-          el('button', { class: 'mini', onclick: () => MT.ouvrirStats(q.id, q.nom) }, 'Statistiques - ' + q.nom)])));
+        [boutonMatchsPasses()].concat(eqs.flatMap(q => [el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom),
+          el('button', { class: 'mini', onclick: () => MT.ouvrirStats(q.id, q.nom) }, 'Statistiques - ' + q.nom)]))));
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir. Créez-en un avec le bouton « + Nouvel événement ».')); return; }
       let jour = '';
       for (const evt of liste) {
