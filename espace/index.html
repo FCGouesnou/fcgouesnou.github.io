@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.26 - 21/11/2026 - « Voir en tant que » ouvert aux présidents ; onglet « Administration » (administrateurs) :
+  Version : 0.27 - 21/11/2026 - sous-onglets (Administration, Partenaires, Frais) sur une seule ligne qui défile
+            0.26 - 21/11/2026 - « Voir en tant que » ouvert aux présidents ; onglet « Administration » (administrateurs) :
             comptes et connexions, personnes à inviter, adoption par équipe, activité, aperçus récents
             0.25 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau » (Partenaires 2.2, aide 1.2)
             0.24 - 21/11/2026 - glisser l'écran vers le bas pour actualiser ; message de version après « Actualiser »
@@ -466,7 +467,7 @@
     .p-marque { border-radius: 999px; padding: 3px 9px; font-weight: 600; }
     .p-barre .champ { border-radius: 14px; }
     /* Onglets internes en segments */
-    .p-onglets { background: #fff; padding: 5px; border-radius: 16px; box-shadow: 0 6px 18px rgba(16,35,92,.08); gap: 4px; display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .p-onglets { background: #fff; padding: 5px; border-radius: 16px; box-shadow: 0 6px 18px rgba(16,35,92,.08); gap: 4px; display: inline-flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
     .p-onglets::-webkit-scrollbar { display: none; }
     .p-onglets .onglet { background: transparent; border-radius: 12px; min-height: 38px; padding: 8px 14px; white-space: nowrap; flex: 0 0 auto; }
     .p-onglets .onglet.actif { background: var(--marine); color: #fff; box-shadow: 0 4px 12px rgba(16,35,92,.3); }
@@ -585,7 +586,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.26';
+    const VERSION_APPLI = '0.27';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
