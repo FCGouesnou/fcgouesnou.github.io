@@ -7,7 +7,8 @@
          Onglet « RACI du bureau » : matrice des responsabilités lue dans la base (tables raci et
          raci_fonctions), réservée au bureau ; chaque ligne peut être ouverte plus tard au CODIR.
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
-  Version : 1.4 - 21/11/2026 - rubrique « Direct du match et statistiques »
+  Version : 1.5 - 21/11/2026 - onglet « Signaler » : bug, évolution ou question, avec captures d'écran, suivi des demandes
+            1.4 - 21/11/2026 - rubrique « Direct du match et statistiques »
             1.3 - 21/11/2026 - rubriques « Voir en tant que » (présidents) et onglet Administration
             1.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau », onglet « RACI »
             1.1 - 21/11/2026 - prise en main : glisser vers le bas, bouton « Mettre à jour »
@@ -142,27 +143,28 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       P('Exceptions : l\'adresse des donateurs (reçu fiscal) et les licences de la saison (attestations), lisibles seulement par les présidents, le trésorier et le secrétaire.'),
     ] },
     { id: 'contact', titre: 'Besoin d\'aide ?', pour: () => true, contenu: (p) => [
+      P('Onglet « Signaler » ci-dessus : 🐞 un bug, ✨ une idée d\'évolution ou 💬 une question, avec une capture d\'écran si besoin. Vous suivez la réponse dans « Mes demandes ».'),
       P(p.coach || p.famille ? 'Parlez-en d\'abord au coach de l\'équipe. ' : '', 'Pour un problème d\'accès ou de fonctionnement : Ronan Durand, responsable informatique du club, ou la rubrique « Nous contacter » du site.'),
     ] },
   ];
   const RUBRIQUE_VUE = { avenir: 'convocations', coach: 'equipes', partenaires: 'partenaires', attestations: 'attestations', frais: 'frais', admin: 'admin' };
 
   // ---------- Fenêtre ----------
-  async function ouvrir() {
+  async function ouvrir(ongletInitial) {
     const p = await profil();
     // RACI : bureau ; CODIR seulement si des lignes lui ont été ouvertes (visible_pour = 'codir')
     p.raci = p.bureau;
     if (!p.raci && p.codir) { const { count } = await sb.from('raci').select('id', { count: 'exact', head: true }); p.raci = (count || 0) > 0; }
-    let onglet = 'aide';
+    let onglet = ongletInitial === 'signaler' ? 'signaler' : 'aide';
     ouvrirFenetre('Aide', (f) => {
       f.classList.add('large');
       const corps = el('div', {});
       const nav = el('div', { class: 'p-onglets' });
       const dessinerNav = () => {
-        nav.replaceChildren(...[['aide', 'Aide'], ...(p.raci ? [['raci', 'RACI']] : [])].map(([k, t]) =>
+        nav.replaceChildren(...[['aide', 'Aide'], ['signaler', 'Signaler'], ...(p.raci ? [['raci', 'RACI']] : [])].map(([k, t]) =>
           el('button', { class: 'onglet' + (onglet === k ? ' actif' : ''), onclick: () => { onglet = k; dessinerNav(); dessiner(); } }, t)));
       };
-      const dessiner = () => { if (onglet === 'raci') dessinerRaci(corps, p); else dessinerAide(corps, p); };
+      const dessiner = () => { if (onglet === 'raci') dessinerRaci(corps, p); else if (onglet === 'signaler') dessinerSignaler(corps, p); else dessinerAide(corps, p); };
       dessinerNav(); dessiner();
       f.append(nav, corps, el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
     });
@@ -246,5 +248,93 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       el('p', { class: 'petit' }, 'Les modifications du RACI se décident en réunion des présidents, du trésorier et du secrétaire, puis sont reportées par le responsable informatique.'));
   }
 
-  return { ouvrir };
+  // ---------- Signaler : bug, évolution, question ----------
+  const TYPES = {
+    bug: { ico: '🐞', titre: 'Un bug', texte: 'Quelque chose ne marche pas comme prévu : un bouton sans effet, un message d\'erreur, une information fausse ou un écran mal affiché.',
+      aide: 'Ce que vous faisiez, ce qui s\'est passé, ce que vous attendiez. Exemple : « J\'ai touché Présent pour Léo, le bouton est resté gris. »', exemple: 'Ex. Le bouton Présent ne répond pas' },
+    evolution: { ico: '✨', titre: 'Une évolution', texte: 'Une idée pour améliorer l\'application : une nouvelle fonction, un écran plus simple, une information qui manque.',
+      aide: 'Votre idée et ce qu\'elle apporterait. Exemple : « Pouvoir voir les anniversaires des joueurs, pour le goûter. »', exemple: 'Ex. Afficher la météo du match' },
+    question: { ico: '💬', titre: 'Une question', texte: 'Vous ne trouvez pas comment faire quelque chose, ou vous voulez une explication.',
+      aide: 'Ce que vous cherchez à faire. Exemple : « Comment proposer des places dans ma voiture ? »', exemple: 'Ex. Comment répondre pour mes deux enfants ?' },
+  };
+  const STATUTS = { nouveau: 'Reçue', en_cours: 'En cours', fait: 'Traitée', refuse: 'Non retenue' };
+  async function dessinerSignaler(z, p) {
+    const cx = contexte();
+    z.replaceChildren(el('p', { class: 'petit' }, 'Un souci ou une idée ? Choisissez le type de demande : le responsable informatique est prévenu et vous répond dans l\'application.'));
+    if (cx.apercu) { z.append(el('p', { class: 'vide' }, 'Pas de signalement pendant un aperçu « Voir en tant que ».')); return; }
+    const choix = el('div', { class: 'sig-choix' });
+    for (const [k, t] of Object.entries(TYPES)) choix.append(el('button', { class: 'sig-carte sig-' + k, onclick: () => formulaire(z, p, k) },
+      el('span', { class: 'sig-ico' }, t.ico), el('strong', {}, t.titre), el('span', {}, t.texte)));
+    z.append(choix, el('details', { class: 'aide-rubrique' }, el('summary', {}, 'Comment faire une capture d\'écran ?'),
+      el('div', { class: 'aide-texte' }, L([B('iPhone'), ' : appuyez en même temps sur le bouton latéral et le bouton volume haut.'],
+        [B('Android'), ' : appuyez en même temps sur le bouton marche et le bouton volume bas.'],
+        [B('Ordinateur'), ' : Windows + Maj + S (Windows), ou Cmd + Maj + 4 (Mac).'],
+        'La capture va dans vos photos : ajoutez-la ensuite avec « Ajouter une capture ».'))));
+    // Mes demandes
+    const { data: mes } = await sb.from('retours').select('id, type, titre, statut, reponse, cree_le').eq('user_id', cx.uid).order('cree_le', { ascending: false }).limit(20);
+    if (mes && mes.length) {
+      z.append(el('h4', { class: 'p-titre' }, 'Mes demandes'));
+      for (const r of mes) z.append(el('div', { class: 'sig-ligne' },
+        el('span', { class: 'sig-ico' }, TYPES[r.type].ico),
+        el('div', {}, el('strong', {}, r.titre), el('small', {}, new Date(r.cree_le).toLocaleDateString('fr-FR') + ' · ' + STATUTS[r.statut]),
+          r.reponse ? el('div', { class: 'sig-reponse' }, 'Réponse : ' + r.reponse) : null),
+        el('span', { class: 'sig-statut st-' + r.statut }, STATUTS[r.statut])));
+    }
+  }
+  // Image réduite (1600 px, JPEG) avant envoi
+  function reduire(fichier) {
+    return new Promise((ok, ko) => {
+      const img = new Image(); const url = URL.createObjectURL(fichier);
+      img.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob((b) => b ? ok(b) : ko(new Error('Image illisible')), 'image/jpeg', 0.82);
+      };
+      img.onerror = () => ko(new Error('Image illisible')); img.src = url;
+    });
+  }
+  function formulaire(z, p, type) {
+    const t = TYPES[type], cx = contexte();
+    const titre = el('input', { class: 'champ', maxlength: 120, placeholder: t.exemple });
+    const desc = el('textarea', { class: 'champ', rows: 5, maxlength: 4000, placeholder: t.aide });
+    const fichiers = [];
+    const vignettes = el('div', { class: 'sig-vignettes' });
+    const entree = el('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+    entree.onchange = () => { for (const f of entree.files) if (fichiers.length < 3) fichiers.push(f); entree.value = ''; dessinerVignettes(); };
+    const dessinerVignettes = () => vignettes.replaceChildren(...fichiers.map((f, i) => el('div', { class: 'sig-vignette' },
+      el('img', { src: URL.createObjectURL(f), alt: '' }), el('button', { onclick: () => { fichiers.splice(i, 1); dessinerVignettes(); } }, '×'))),
+      fichiers.length < 3 ? el('button', { class: 'mini', onclick: () => entree.click() }, '📷 Ajouter une capture') : null);
+    dessinerVignettes();
+    z.replaceChildren(
+      el('div', { class: 'sig-entete sig-' + type }, el('span', { class: 'sig-ico' }, t.ico), el('div', {}, el('strong', {}, t.titre), el('span', {}, t.texte))),
+      el('label', { class: 'direct-champ' }, el('span', {}, 'En une phrase'), titre),
+      el('label', { class: 'direct-champ' }, el('span', {}, 'Le détail'), desc),
+      el('div', { class: 'direct-champ' }, el('span', {}, 'Captures d\'écran (3 au plus, facultatif)'), vignettes, entree),
+      el('p', { class: 'petit' }, 'Ajouté automatiquement : écran « ' + (cx.ecran || 'Accueil') + ' », version ' + cx.version + ', type d\'appareil.'),
+      el('div', { class: 'boutons' },
+        el('button', { class: 'btn secondaire', onclick: () => dessinerSignaler(z, p) }, 'Retour'),
+        el('button', { class: 'btn principal', onclick: async (e) => {
+          if (titre.value.trim().length < 3) { toast('Écrivez votre demande en une phrase.'); return; }
+          const b = e.currentTarget; b.disabled = true; b.textContent = 'Envoi...';
+          try {
+            const captures = [];
+            for (const f of fichiers) {
+              const blob = await reduire(f);
+              const chemin = cx.uid + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7) + '.jpg';
+              const { error: e1 } = await sb.storage.from('retours').upload(chemin, blob, { contentType: 'image/jpeg' });
+              if (e1) throw e1;
+              captures.push(chemin);
+            }
+            const { error: e2 } = await sb.from('retours').insert({ club_id: cx.club, personne_id: cx.fiche || null, type, titre: titre.value.trim(),
+              description: desc.value.trim() || null, ecran: cx.ecran, version: cx.version, appareil: navigator.userAgent.slice(0, 250), captures });
+            if (e2) throw e2;
+            toast('Merci ! Votre demande est envoyée.');
+            dessinerSignaler(z, p);
+          } catch (err) { toast('Envoi impossible : ' + (err.message || err)); b.disabled = false; b.textContent = 'Envoyer'; }
+        } }, 'Envoyer')));
+    setTimeout(() => titre.focus(), 50);
+  }
+
+  return { ouvrir, signaler: () => ouvrir('signaler') };
 }

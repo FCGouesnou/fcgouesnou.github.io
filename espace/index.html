@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.32 - 21/11/2026 - heures « 13h30 » ; rendez-vous mis en évidence ; « Modifié » remplacé par un repère
+  Version : 0.33 - 21/11/2026 - « ? » > Signaler : bug, évolution ou question avec captures d'écran ; Administration > Retours
+            (statut, réponse, notification à l'auteur)
+            0.32 - 21/11/2026 - heures « 13h30 » ; rendez-vous mis en évidence ; « Modifié » remplacé par un repère
             temporaire (3 jours) indiquant ce qui a changé : heure, rendez-vous ou lieu
             0.31 - 21/11/2026 - fenêtres : croix de fermeture toujours visible, page derrière bloquée (défilement fiable
             sur iPhone), défilement confiné à la fenêtre, touche Échap ; libellé « Pour tous les matchs »
@@ -436,6 +438,28 @@
     .stats-tableau th { cursor: pointer; color: var(--gris); font-weight: 600; } .stats-tableau th.actif { color: var(--marine); text-decoration: underline; }
     .stats-res { font-family: Sora, Inter, sans-serif; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #eef1f7; color: var(--gris); }
     .stats-res.v { background: #e3f7ec; color: #1f8a4c; } .stats-res.n { background: #eef1f7; color: #4a5568; } .stats-res.d { background: #fde8e8; color: #c0392b; }
+    /* Signaler (aide) et retours (administration) */
+    .sig-choix { display: grid; gap: 10px; margin: 10px 0; }
+    @media (min-width: 640px) { .sig-choix { grid-template-columns: repeat(3, 1fr); } }
+    .sig-carte { display: grid; gap: 4px; text-align: left; border: 2px solid #e3e9f6; background: #fff; border-radius: 16px; padding: 14px; cursor: pointer; color: var(--texte); font-size: .9rem; }
+    .sig-carte strong { font-family: Sora, Inter, sans-serif; font-size: 1.05rem; color: var(--marine); }
+    .sig-ico { font-size: 1.6rem; }
+    .sig-bug { border-color: #ffc9c9; } .sig-evolution { border-color: #c9ddff; } .sig-question { border-color: #ffe3a3; }
+    .sig-entete { display: flex; gap: 12px; align-items: flex-start; border: 2px solid #e3e9f6; border-radius: 16px; padding: 12px; margin-bottom: 10px; font-size: .9rem; }
+    .sig-entete div { display: grid; gap: 2px; } .sig-entete strong { font-family: Sora, Inter, sans-serif; color: var(--marine); }
+    .sig-vignettes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; }
+    .sig-vignette { position: relative; width: 72px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid #e3e9f6; display: block; }
+    .sig-vignette img { width: 100%; height: 100%; object-fit: cover; }
+    .sig-vignette button { position: absolute; top: 2px; right: 2px; border: 0; border-radius: 50%; width: 22px; height: 22px; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; }
+    .sig-ligne { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; align-items: start; background: #fff; border: 1px solid #e3e9f6; border-radius: 12px; padding: 10px; margin: 6px 0; }
+    .sig-ligne small { display: block; color: var(--gris); } .sig-reponse { margin-top: 4px; font-size: .88rem; background: #f5f8fe; border-radius: 8px; padding: 6px 8px; }
+    .sig-statut { font-size: .75rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #eef1f7; color: #4a5568; white-space: nowrap; }
+    .sig-statut.st-nouveau { background: #e8f1ff; color: #1a3a8f; } .sig-statut.st-en_cours { background: #fff1d6; color: #9a5b00; }
+    .sig-statut.st-fait { background: #e3f7ec; color: #1f8a4c; } .sig-statut.st-refuse { background: #fde8e8; color: #c0392b; }
+    .rt-carte { background: #fff; border: 1px solid #e3e9f6; border-left: 4px solid #2f80ed; border-radius: 12px; padding: 12px; margin: 8px 0; display: grid; gap: 6px; }
+    .rt-carte.st-fait, .rt-carte.st-refuse { border-left-color: #c9d2e3; opacity: .85; }
+    .rt-tete { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; } .rt-carte small { color: var(--gris); }
+    .rt-desc { margin: 0; white-space: pre-wrap; font-size: .9rem; }
     /* Aide et RACI */
     .entete #btnAide { width: 36px; padding: 0; border-radius: 50%; font-family: Sora, Inter, sans-serif; font-weight: 700; font-size: 1rem; }
     .aide-rubrique { background: #fff; border: 1px solid #e3e9f6; border-radius: 14px; margin: 8px 0; padding: 0 14px; }
@@ -641,7 +665,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=2.2';
     import { initAttestations } from './attestations.js?v=1.1';
-    import { initAide } from './aide.js?v=1.4';
+    import { initAide } from './aide.js?v=1.5';
     import { initMatch } from './match.js?v=1.1';
 
     // ---------- Configuration ----------
@@ -651,7 +675,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.32';
+    const VERSION_APPLI = '0.33';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -2047,7 +2071,9 @@
     // ---------- Aide (bouton « ? ») : rubriques selon le profil, onglet affiché ouvert d'office ----------
     const aide = initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte: () => {
       const famille = [...E.personnes.values()].some(x => x.enfant);
-      return { coach: E.coachees.size > 0, famille, joueur: !famille && [...E.miennes].some(id => !E.coachees.has(id)), vue, apercu: !!AP.actif };
+      const ECRANS = { avenir: 'À venir', coach: 'Mes équipes', partenaires: 'Partenaires', attestations: 'Attestations', frais: 'Frais des coachs', admin: 'Administration' };
+      return { coach: E.coachees.size > 0, famille, joueur: !famille && [...E.miennes].some(id => !E.coachees.has(id)), vue, apercu: !!AP.actif,
+        version: VERSION_APPLI, ecran: ECRANS[vue] || vue, uid: session && session.user.id, fiche: (E.fiches[0] || {}).id, club: (E.fiches[0] || {}).club_id };
     } });
     $('btnAide').addEventListener('click', () => aide.ouvrir());
     // Direct du match et statistiques (module match.js)
@@ -2083,11 +2109,12 @@
       z.replaceChildren(el('p', { class: 'petit' }, 'Chargement...'));
       const { data: t, error } = await sbReel.rpc('admin_tableau');
       if (error) { z.replaceChildren(el('p', { class: 'vide' }, 'Administration indisponible : ' + error.message)); return; }
+      { const { count } = await sbReel.from('retours').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau'); t.retours_nouveaux = count || 0; }
       const a = t.activite || {};
       const recents = t.comptes.filter(c => c.derniere && Date.now() - new Date(c.derniere) < 7 * 86400000).length;
       const notifs = t.comptes.filter(c => c.appareils > 0).length;
       const sous = el('div', { class: 'p-onglets' }, [['synthese', 'Synthèse'], ['comptes', 'Comptes (' + t.comptes.length + ')'],
-        ['inviter', 'À inviter (' + t.a_inviter.length + ')'], ['apercus', 'Aperçus']].map(([k, l]) =>
+        ['inviter', 'À inviter (' + t.a_inviter.length + ')'], ['retours', 'Retours' + (t.retours_nouveaux ? ' (' + t.retours_nouveaux + ')' : '')], ['apercus', 'Aperçus']].map(([k, l]) =>
         el('button', { class: 'onglet' + (ADM.sous === k ? ' actif' : ''), onclick: () => { ADM.sous = k; afficherAdmin(); } }, l)));
       const corps = el('div', {});
       z.replaceChildren(sous, corps);
@@ -2126,11 +2153,41 @@
             el('div', { class: 'p-ligne-nom' }, c.nom, el('small', {}, profilAdm(c))),
             el('div', { class: 'p-ligne-info' }, el('small', {}, c.compte ? 'connexion non terminée' : 'jamais connecté'),
               c.email ? null : el('small', { class: 'adm-alerte' }, 'pas d\'e-mail : impossible de se connecter')))));
+      } else if (ADM.sous === 'retours') {
+        await afficherRetours(corps);
       } else {
         corps.append(el('p', { class: 'petit' }, 'Les 20 derniers « Voir en tant que », notés au journal.'),
           ...(t.apercus.length ? t.apercus.map(x => el('div', { class: 'p-ligne' },
             el('div', { class: 'p-ligne-nom' }, (x.par || 'Inconnu') + ' a vu l\'application de ' + (x.cible || '?'), el('small', {}, ilYa(x.le)))))
             : [el('p', { class: 'vide' }, 'Aucun aperçu.')]));
+      }
+    }
+
+    // Retours (bugs, évolutions, questions) : statut, réponse (notifiée à l'auteur), captures en liens de 10 minutes
+    const RT_TYPES = { bug: '🐞 Bug', evolution: '✨ Évolution', question: '💬 Question' };
+    const RT_STATUTS = { nouveau: 'Reçue', en_cours: 'En cours', fait: 'Traitée', refuse: 'Non retenue' };
+    async function afficherRetours(corps) {
+      const { data, error } = await sbReel.from('retours').select('*, auteur:personnes!retours_personne_id_fkey(prenom, nom)').order('cree_le', { ascending: false }).limit(100);
+      if (error) { corps.append(el('p', { class: 'vide' }, 'Retours indisponibles : ' + error.message)); return; }
+      corps.append(el('p', { class: 'petit' }, 'Demandes envoyées depuis « ? » > Signaler. Changer le statut ou répondre prévient l\'auteur par notification.'));
+      if (!data.length) { corps.append(el('p', { class: 'vide' }, 'Aucune demande pour l\'instant.')); return; }
+      for (const r of data) {
+        const sel = el('select', { class: 'champ' }, Object.entries(RT_STATUTS).map(([k, l]) => el('option', { value: k, selected: r.statut === k }, l)));
+        const rep = el('textarea', { class: 'champ', rows: 2, maxlength: 2000, placeholder: 'Réponse à l\'auteur (facultatif)' }); rep.value = r.reponse || '';
+        const imgs = el('div', { class: 'sig-vignettes' });
+        for (const c of r.captures || []) sbReel.storage.from('retours').createSignedUrl(c, 600).then(({ data: u }) => {
+          if (u) imgs.append(el('a', { href: u.signedUrl, target: '_blank', rel: 'noopener', class: 'sig-vignette' }, el('img', { src: u.signedUrl, alt: 'Capture' })));
+        });
+        corps.append(el('div', { class: 'rt-carte st-' + r.statut },
+          el('div', { class: 'rt-tete' }, el('strong', {}, RT_TYPES[r.type] + ' · ' + r.titre), el('span', { class: 'sig-statut st-' + r.statut }, RT_STATUTS[r.statut])),
+          el('small', {}, [r.auteur ? r.auteur.prenom + ' ' + r.auteur.nom : 'Inconnu', new Date(r.cree_le).toLocaleString('fr-FR', { timeZone: FUSEAU, dateStyle: 'short', timeStyle: 'short' }),
+            r.ecran ? 'écran ' + r.ecran : null, r.version ? 'v' + r.version : null, /iphone|ipad/i.test(r.appareil || '') ? 'iPhone' : /android/i.test(r.appareil || '') ? 'Android' : r.appareil ? 'ordinateur' : null].filter(Boolean).join(' · ')),
+          r.description ? el('p', { class: 'rt-desc' }, r.description) : null, imgs,
+          el('div', { class: 'p-deux' }, sel, el('button', { class: 'mini principal', onclick: async () => {
+            const { error: e2 } = await sbReel.from('retours').update({ statut: sel.value, reponse: rep.value.trim() || null, traite_le: new Date().toISOString(), traite_par: (E.fiches[0] || {}).id || null }).eq('id', r.id);
+            if (e2) { toast('Erreur : ' + e2.message); return; }
+            toast('Enregistré, l\'auteur est prévenu.'); afficherAdmin();
+          } }, 'Enregistrer')), rep));
       }
     }
 
