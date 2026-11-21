@@ -7,7 +7,8 @@
          Onglet « RACI du bureau » : matrice des responsabilités lue dans la base (tables raci et
          raci_fonctions), réservée au bureau ; chaque ligne peut être ouverte plus tard au CODIR.
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
-  Version : 1.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau », onglet « RACI »
+  Version : 1.3 - 21/11/2026 - rubriques « Voir en tant que » (présidents) et onglet Administration
+            1.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau », onglet « RACI »
             1.1 - 21/11/2026 - prise en main : glisser vers le bas, bouton « Mettre à jour »
             1.0 - 21/11/2026 - première version
 */
@@ -114,8 +115,15 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         'Renseignez la puissance fiscale du véhicule (case P.6 de la carte grise).',
         'Aucun reçu avant la délibération du CODIR autorisant le remboursement.'),
     ] },
-    { id: 'admin', titre: 'Administration', pour: (p) => p.admin, contenu: () => [
-      L([B('Voir en tant que'), ' : l\'application telle qu\'une personne la voit, en lecture seule, notée au journal.'],
+    { id: 'apercu', titre: 'Voir en tant que', pour: (p) => p.roles.has('presidence') && !p.admin, contenu: () => [
+      P('Le bouton « Voir en tant que », en haut de l\'écran, affiche l\'application telle qu\'un coach, un parent ou un joueur la voit : choisissez la personne, puis « Revenir à moi ».'),
+      L('C\'est une lecture seule : aucun bouton n\'enregistre rien et personne n\'est prévenu.',
+        'Chaque aperçu est noté dans le journal du club.',
+        'Utile pour vérifier ce que voient les familles et les coachs avant de leur répondre.'),
+    ] },
+    { id: 'admin', titre: 'Administration', vues: ['admin'], pour: (p) => p.admin, contenu: () => [
+      L([B('Onglet Administration'), ' : comptes ouverts et dernières connexions, personnes clés jamais connectées, adoption par équipe, activité des 7 derniers jours, points à traiter et derniers aperçus.'],
+        [B('Voir en tant que'), ' : l\'application telle qu\'une personne la voit, en lecture seule, notée au journal.'],
         [B('Mises à jour SportEasy'), ' : chaque nuit, les écarts avec SportEasy deviennent des propositions à appliquer ou ignorer ; rien n\'est appliqué seul.'],
         'Sauvegarde nocturne de toute la base dans le Drive (Commission IT), avec les reçus et les attestations en PDF.',
         'Toute suppression de données se décide avec le responsable informatique.'),
@@ -128,7 +136,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       P(p.coach || p.famille ? 'Parlez-en d\'abord au coach de l\'équipe. ' : '', 'Pour un problème d\'accès ou de fonctionnement : Ronan Durand, responsable informatique du club, ou la rubrique « Nous contacter » du site.'),
     ] },
   ];
-  const RUBRIQUE_VUE = { avenir: 'convocations', coach: 'equipes', partenaires: 'partenaires', attestations: 'attestations', frais: 'frais' };
+  const RUBRIQUE_VUE = { avenir: 'convocations', coach: 'equipes', partenaires: 'partenaires', attestations: 'attestations', frais: 'frais', admin: 'admin' };
 
   // ---------- Fenêtre ----------
   async function ouvrir() {
