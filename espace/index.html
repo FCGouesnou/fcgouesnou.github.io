@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.31 - 21/11/2026 - fenêtres : croix de fermeture toujours visible, page derrière bloquée (défilement fiable
+  Version : 0.32 - 21/11/2026 - heures « 13h30 » ; rendez-vous mis en évidence ; « Modifié » remplacé par un repère
+            temporaire (3 jours) indiquant ce qui a changé : heure, rendez-vous ou lieu
+            0.31 - 21/11/2026 - fenêtres : croix de fermeture toujours visible, page derrière bloquée (défilement fiable
             sur iPhone), défilement confiné à la fenêtre, touche Échap ; libellé « Pour tous les matchs »
             0.30.2 - 21/11/2026 - corrections : boutons « Tâches / Statistiques » de Mes équipes (texte parasite),
             titre des cartes sur toute la largeur quand il y a plusieurs pastilles
@@ -393,6 +395,9 @@
     /* En-tête de carte : le titre garde une largeur lisible, les pastilles passent dessous si besoin */
     .evt-tete { flex-wrap: wrap; row-gap: 6px; }
     .evt-tete .evt-titre { flex: 1 1 240px; min-width: 0; }
+    .rdv { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; padding: 9px 12px; border-radius: 12px; background: #e8f1ff; border: 1px solid #b9d4ff; color: var(--marine); font-size: .98rem; }
+    .rdv strong { font-family: Sora, Inter, sans-serif; font-size: 1.1rem; } .rdv small { color: var(--gris); }
+    .rdv-ico { font-size: 1.1rem; }
     .pastille.p-horaire { background: #fff1d6; color: #9a5b00; border: 1px solid #ffc861; font-weight: 700; }
     /* Direct du match et statistiques */
     .direct-carte .texte strong { color: var(--marine); }
@@ -646,7 +651,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.31';
+    const VERSION_APPLI = '0.32';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -710,12 +715,12 @@
     const fmtJour = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, weekday: 'long', day: 'numeric', month: 'long' });
     const fmtHeure = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, hour: '2-digit', minute: '2-digit' });
     const jourDe = (d) => { const s = fmtJour.format(new Date(d)); return s.charAt(0).toUpperCase() + s.slice(1); };
-    const heure = (d) => fmtHeure.format(new Date(d)).replace(':', ' h ');
+    const heure = (d) => fmtHeure.format(new Date(d)).replace(':', 'h');
     const LIB_TYPE = { match: 'Match', entrainement: 'Entraînement', tournoi: 'Tournoi', reunion: 'Réunion', autre: 'Événement' };
     const age = (p) => p.annee_naissance ? new Date().getFullYear() - p.annee_naissance : null;
     const fmtCle = new Intl.DateTimeFormat('en-CA', { timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit' });
     const cleJour = (d) => fmtCle.format(new Date(d));
-    const sansHeure = (evt) => heure(evt.debut) === '00 h 00' && !evt.fin;
+    const sansHeure = (evt) => heure(evt.debut) === '00h00' && !evt.fin;
     const avecGroupes = (equipeId) => { const q = E.equipes.get(equipeId); return q && q.sous_groupes && q.sous_groupes.length ? q.sous_groupes : null; };
     const estMatch = (evt) => evt.type === 'match' || evt.type === 'tournoi';
     // Événement encore à afficher : commencé il y a moins de 3 h, ou sans heure et prévu aujourd'hui
@@ -971,7 +976,13 @@
         r.push(evt.groupe ? el('span', { class: 'pastille p-groupe' }, 'Équipe ' + evt.groupe) : el('span', { class: 'pastille p-sansgroupe' }, 'Équipe à choisir'));
       if (estMatch(evt) && sansHeure(evt) && evt.etat !== 'annule') r.push(el('span', { class: 'pastille p-horaire' }, '⏱ Horaire à confirmer'));
       if (evt.etat === 'annule') r.push(el('span', { class: 'pastille p-annule' }, 'Annulé'));
-      else if (evt.etat === 'modifie') r.push(el('span', { class: 'pastille p-modifie' }, 'Modifié'));
+      else if (evt.changement && evt.changement_le && Date.now() - new Date(evt.changement_le) < 3 * 86400000) {
+        // Repère temporaire (3 jours) : ce qui a changé ; la notification est partie au moment du changement
+        const c = evt.changement.split(', ');
+        const lib = c.length > 1 ? c.join(' et ').replace(/^h/, 'H').replace(/^r/, 'R').replace(/^l/, 'L') + ' modifiés'
+          : { heure: 'Heure modifiée', 'rendez-vous': 'Rendez-vous modifié', lieu: 'Lieu modifié' }[c[0]] || 'Modifié';
+        r.push(el('span', { class: 'pastille p-modifie', title: 'Changement du ' + jourDe(evt.changement_le) }, lib));
+      }
       return r;
     }
     function titre(evt) {
@@ -983,14 +994,21 @@
     function details(evt) {
       const l = [];
       let h = sansHeure(evt) ? 'Horaire à confirmer' : heure(evt.debut) + (evt.fin ? ' à ' + heure(evt.fin) : '');
-      if (evt.rendez_vous) h += ' (rendez-vous ' + heure(evt.rendez_vous) + ')';
-      l.push(h);
+      l.push(evt.rendez_vous && sansHeure(evt) ? 'Horaire du match à confirmer' : h);
       if (evt.lieu || evt.adresse) l.push([evt.lieu, evt.adresse].filter(Boolean).join(', '));
       const dest = evt.terrain && evt.terrain.lat ? evt.terrain.lat + ',' + evt.terrain.lon : [evt.lieu, evt.adresse].filter(Boolean).join(', ');
       if (dest && evt.etat !== 'annule')
         l.push(el('a', { class: 'itineraire', target: '_blank', rel: 'noopener',
           href: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(dest) }, 'Itinéraire'));
       return l;
+    }
+    // Rendez-vous mis en évidence (heure fixée par le coach)
+    function blocRdv(evt) {
+      if (!evt.rendez_vous || evt.etat === 'annule') return null;
+      const memeJour = cleJour(evt.rendez_vous) === cleJour(evt.debut);
+      return el('div', { class: 'rdv' }, el('span', { class: 'rdv-ico' }, '⏰'),
+        el('span', {}, 'Rendez-vous ', el('strong', {}, heure(evt.rendez_vous)), memeJour ? '' : ' (' + jourDe(evt.rendez_vous) + ')',
+          !sansHeure(evt) && estMatch(evt) ? el('small', {}, ' · coup d\'envoi ' + heure(evt.debut)) : null));
     }
     function compteur(evt) {
       const r = E.resumes.get(evt.id) || [];
@@ -1444,6 +1462,7 @@
       const cl = 'evt' + (evt.etat === 'annule' ? ' annule' : '') + (estMatch(evt) ? ' evt-match ' + (evt.domicile === false ? 'exterieur' : 'domicile') : '');
       const c = el('div', { class: cl },
         el('div', { class: 'evt-tete' }, el('div', { class: 'evt-titre' }, titre(evt)), ...pastilles(evt)),
+        blocRdv(evt),
         el('div', { class: 'evt-detail' }, details(evt).map(t => el('div', {}, t))),
         evt.consignes ? el('div', { class: 'consignes' }, evt.consignes) : null);
       if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) c.append(blocReponse(evt, cv));
@@ -1501,7 +1520,7 @@
             el('div', { class: 'hero-vs' }, el('b', {}, 'VS'), el('span', {}, evt.domicile === false ? 'Extérieur' : 'Domicile')),
             el('div', { class: 'equipe' }, el('div', { class: 'hero-ecusson' }, initiales(evt.adversaire)), el('strong', {}, evt.adversaire || 'Adversaire à venir'))),
           chips,
-          evt.rendez_vous ? el('div', { class: 'hero-detail' }, 'Rendez-vous ' + heure(evt.rendez_vous)) : null,
+          blocRdv(evt),
           ...pastilles(evt).filter(p => !p.classList.contains('p-match')).length ? [el('div', { class: 'hero-detail' }, ...pastilles(evt).filter(p => !p.classList.contains('p-match')))] : [],
           evt.consignes ? el('div', { class: 'consignes' }, evt.consignes) : null));
       const corps = c.lastChild;
@@ -1626,7 +1645,7 @@
           const s = el('select', { class: 'champ' }, el('option', { value: '' }, 'Équipe ?'),
             groupes.map(g => el('option', { value: g, selected: ev.groupe === g }, 'Équipe ' + g)));
           selGroupe.set(ev.id, s);
-          const h = heure(ev.debut) === '00 h 00' ? '' : heure(ev.debut) + ' - ';
+          const h = heure(ev.debut) === '00h00' ? '' : heure(ev.debut) + ' - ';
           f.append(el('div', { class: 'compo-match' },
             el('span', {}, h + (ev.adversaire ? (ev.domicile === false ? 'chez ' : 'contre ') + ev.adversaire : 'Match') + (ev.titre ? ' (' + ev.titre + ')' : '')), s));
         }
