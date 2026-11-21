@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.27 - 21/11/2026 - sous-onglets (Administration, Partenaires, Frais) sur une seule ligne qui défile
+  Version : 0.28 - 21/11/2026 - motifs d'absence lus par la fonction convocation_motifs : visibles du joueur, de sa famille,
+            des coachs et des administrateurs ; les présidents voient seulement « motif renseigné »
+            0.27 - 21/11/2026 - sous-onglets (Administration, Partenaires, Frais) sur une seule ligne qui défile
             0.26 - 21/11/2026 - « Voir en tant que » ouvert aux présidents ; onglet « Administration » (administrateurs) :
             comptes et connexions, personnes à inviter, adoption par équipe, activité, aperçus récents
             0.25 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau » (Partenaires 2.2, aide 1.2)
@@ -586,7 +588,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.27';
+    const VERSION_APPLI = '0.28';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -597,7 +599,7 @@
     // de la personne connectée renvoient les valeurs calculées pour la personne observée.
     const AP = { actif: null, suisAdmin: false, peutApercu: false };
     const RPC_LECTURE = new Set(['covoiturage_evenements', 'covoit_candidats', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord',
-                                 'taches_evenement', 'fiche_match', 'taches_candidats', 'taches_equipe']);
+                                 'taches_evenement', 'fiche_match', 'taches_candidats', 'taches_equipe', 'convocation_motifs']);
     const MSG_APERCU = 'Aperçu en lecture seule : aucune modification n\'est enregistrée.';
     function refus() {
       const r = { data: null, error: { message: MSG_APERCU } };
@@ -779,6 +781,13 @@
     // Retour sur l'application (téléphone sorti de veille, onglet repris) : signale une nouvelle version
     document.addEventListener('visibilitychange', () => { if (!document.hidden && session) verifierVersion(); });
 
+    // Motifs d'absence (fonction convocation_motifs) : texte pour le joueur, sa famille et les coachs ;
+    // pour les autres (présidents en aperçu), seulement l'indication qu'un motif existe
+    function ajouterMotifs(lignes, motifs) {
+      const m = new Map((motifs || []).map(x => [x.evenement_id + '|' + x.personne_id, x]));
+      return lignes.map(l => { const x = m.get(l.evenement_id + '|' + l.personne_id); return { ...l, motif: x ? x.motif : null, a_motif: !!(x && x.a_motif) }; });
+    }
+
     // ---------- Chargement des données ----------
     async function charger() {
       const uid = session.user.id;
@@ -830,8 +839,10 @@
         const idsEvt = E.evenements.map(e => e.id);
         const idsPers = [...E.personnes.keys()];
         if (idsEvt.length && idsPers.length) {
-          const { data: cv } = await sb.from('convocations').select('evenement_id, personne_id, reponse, motif').in('evenement_id', idsEvt).in('personne_id', idsPers);
-          E.convocations = cv || [];
+          const [{ data: cv }, { data: mt }] = await Promise.all([
+            sb.from('convocations').select('evenement_id, personne_id, reponse').in('evenement_id', idsEvt).in('personne_id', idsPers),
+            sb.rpc('convocation_motifs', { evs: idsEvt })]);
+          E.convocations = ajouterMotifs(cv || [], mt);
         }
         await Promise.all(idsEvt.map(async (id) => {
           const { data } = await sb.rpc('convocations_evenement', { ev: id });
@@ -953,7 +964,8 @@
       }
       bloc.append(zone);
       if (!peut && evt.etat !== 'annule') bloc.append(el('div', { class: 'note' }, 'La réponse est donnée par un parent.'));
-      if (cv.motif && (cv.reponse === 'absent' || cv.reponse === 'incertain')) bloc.append(el('div', { class: 'note' }, 'Motif : ' + cv.motif));
+      if ((cv.motif || cv.a_motif) && (cv.reponse === 'absent' || cv.reponse === 'incertain'))
+        bloc.append(el('div', { class: 'note' }, cv.motif ? 'Motif : ' + cv.motif : 'Motif renseigné (visible des coachs).'));
       return bloc;
     }
 
@@ -1490,16 +1502,17 @@
     }
 
     async function detailCoach(evt) {
-      const { data, error } = await sb.from('convocations')
-        .select('personne_id, reponse, motif, desiste_le, personne:personnes!convocations_personne_id_fkey(prenom, nom)')
-        .eq('evenement_id', evt.id);
+      const [{ data: brut, error }, { data: mt }] = await Promise.all([sb.from('convocations')
+        .select('personne_id, reponse, desiste_le, personne:personnes!convocations_personne_id_fkey(prenom, nom)')
+        .eq('evenement_id', evt.id), sb.rpc('convocation_motifs', { evs: [evt.id] })]);
       if (error) return [el('p', { class: 'petit' }, 'Erreur : ' + error.message)];
+      const data = ajouterMotifs((brut || []).map(x => ({ ...x, evenement_id: evt.id })), mt);
       const ordre = { sans_reponse: 0, incertain: 1, absent: 2, present: 3 };
       const lib = { present: 'Présent', absent: 'Absent', incertain: 'Incertain', sans_reponse: 'Sans réponse' };
       return (data || []).sort((a, b) => ordre[a.reponse] - ordre[b.reponse] || a.personne.nom.localeCompare(b.personne.nom))
         .map(x => el('div', { class: 'ligne-joueur' },
           el('span', {}, x.personne.prenom + ' ' + x.personne.nom),
-          el('span', {}, lib[x.reponse] + (x.desiste_le ? ' (désisté)' : '') + (x.motif ? ' - ' + x.motif : ''))));
+          el('span', {}, lib[x.reponse] + (x.desiste_le ? ' (désisté)' : '') + (x.motif ? ' - ' + x.motif : x.a_motif ? ' - motif renseigné' : ''))));
     }
 
     async function relancer(evt, n) {
