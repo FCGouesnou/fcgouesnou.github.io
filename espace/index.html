@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.19 - 21/11/2026 - Partenaires 2.0 (identité légale des entreprises pour les reçus fiscaux)
+  Version : 0.20 - 21/11/2026 - Partenaires 2.1 (dons réservés au bureau : demande par la commission, avis par e-mail)
+            0.19 - 21/11/2026 - Partenaires 2.0 (identité légale des entreprises pour les reçus fiscaux)
            0.18 - 21/11/2026 - look « Nuit de match » étendu à tous les écrans : Mes équipes, Partenaires,
            Attestations, Frais des coachs, Mises à jour SportEasy et fenêtres (tuiles, listes, onglets, champs)
            0.17 - 21/11/2026 - nouveau look, étape 2 : carte « Prochain match » en vedette (écussons, compte à
@@ -530,7 +531,7 @@
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-    import { initPartenaires } from './partenaires.js?v=2.0';
+    import { initPartenaires } from './partenaires.js?v=2.1';
     import { initAttestations } from './attestations.js?v=1.1';
 
     // ---------- Configuration ----------

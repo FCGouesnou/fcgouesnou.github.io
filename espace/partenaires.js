@@ -5,7 +5,11 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 2.0 - 21/11/2026 - identité légale des entreprises pour les reçus fiscaux (raison sociale, SIREN,
+  Version : 2.1 - 21/11/2026 - dons réservés au bureau (présidents, trésorier, secrétaire, administrateur) :
+            la commission dépose une « demande de don » (avis par e-mail au bureau), le bureau modifie,
+            valide, envoie ou annule ; chaque reçu validé est annoncé par e-mail avec le PDF au trésorier,
+            au secrétaire, aux présidents et à la commission
+            2.0 - 21/11/2026 - identité légale des entreprises pour les reçus fiscaux (raison sociale, SIREN,
             forme juridique, siège), trouvée dans l'annuaire public des entreprises : bloc dans « Coordonnées »
             (« C'est elle », correction à la main), liste « Identités à vérifier » dans « Dons », don pré-rempli
             1.9 - 17/11/2026 - entreprises archivées (fermeture, départ du contact...) : bouton « Archiver » /
@@ -121,6 +125,9 @@ export function initPartenaires(ctx) {
     S.peutDons = S.peutCompta || r.some(x => x.role === 'secretariat');
     S.estAdmin = r.some(x => x.role === 'admin');
     S.clubId = (r[0] || {}).club_id || null;
+    // Gestion des dons (validation, envoi, annulation) : bureau et administrateurs, décidé par la base
+    S.gereDons = false;
+    if (S.peutDons && S.clubId) { const { data: g } = await sb.rpc('dons_gestion', { c: S.clubId }); S.gereDons = !!g; }
     // Nom de la personne connectée, pour la balise {{Référent}} des modèles de mail
     try {
       const { data: u } = await sb.auth.getUser();
@@ -849,8 +856,9 @@ export function initPartenaires(ctx) {
         el('div', {}, el('strong', {}, String(liste.filter(d => d.recu_statut === 'à valider').length)), el('span', {}, 'reçus à valider')),
         el('div', {}, el('strong', {}, String(liste.filter(d => ['validé', 'envoyé'].includes(d.recu_statut)).length)), el('span', {}, 'reçus validés'))),
       el('p', { class: 'petit' }, 'Dons sans contrepartie des entreprises (Cerfa 16216) et des particuliers (Cerfa 11580). Un contrat avec panneau ou visibilité est du parrainage : facture, pas de reçu. Année civile = année fiscale du donateur.'),
+      S.gereDons ? null : el('p', { class: 'petit' }, 'La commission dépose une demande de don ; le bureau (présidents, trésorier, secrétaire) est prévenu par e-mail et valide le reçu.'),
       el('div', { class: 'p-barre' }, selAnnee,
-        el('button', { class: 'mini', onclick: () => formDon(null) }, '+ Don'),
+        el('button', { class: 'mini', onclick: () => formDon(null) }, S.gereDons ? '+ Don' : '+ Demande de don'),
         el('button', { class: 'mini', onclick: () => exporterRegistre(liste) }, 'Exporter le registre'),
         el('button', { class: 'mini', onclick: () => identitesAVerifier() }, 'Identités à vérifier'),
         S.estAdmin ? el('button', { class: 'mini', onclick: () => formSignature() }, 'Signature des reçus') : null));
@@ -865,14 +873,23 @@ export function initPartenaires(ctx) {
 
   function ligneDon(d, zone) {
     const actions = el('span', { class: 'p-boutons' });
-    if (d.recu_statut === 'à valider') {
+    if (d.recu_statut === 'à valider' && !S.gereDons) {
+      actions.append(el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Aperçu du reçu'),
+        el('span', { class: 'petit' }, 'Validation par le bureau'));
+    } else if (d.recu_statut === 'à valider') {
       actions.append(el('button', { class: 'mini', onclick: () => formDon(d) }, 'Modifier'),
         el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Aperçu du reçu'),
-        el('button', { class: 'mini principal', onclick: async () => {
+        el('button', { class: 'mini principal', onclick: async (ev) => {
           if (!confirm('Valider le reçu de ' + d.donateur_nom + ' (' + eur(d.montant) + ') ? Un numéro d\'ordre lui sera attribué et il ne pourra plus être modifié.')) return;
+          ev.currentTarget.disabled = true;
           const { data: num, error } = await sb.rpc('don_valider', { p_don: d.id });
-          if (error) { toast('Erreur : ' + error.message); return; }
-          toast('Reçu n° ' + num + ' validé.'); dessinerDons(zone);
+          if (error) { toast('Erreur : ' + error.message); ev.currentTarget.disabled = false; return; }
+          toast('Reçu n° ' + num + ' validé. Préparation du reçu signé et de l\'avis par e-mail...');
+          // Avis au trésorier, au secrétaire, aux présidents et à la commission, avec le PDF signé
+          const r = await appelRecu({ action: 'avis_recu', don: d.id });
+          if (r.msg) toast('Reçu n° ' + num + ' validé, avis non envoyé : ' + r.msg);
+          else if (r.data && r.data.envoye) toast('Reçu n° ' + num + ' validé et annoncé par e-mail (' + r.data.a.length + ' destinataires).');
+          dessinerDons(zone);
         } }, 'Valider le reçu'),
         el('button', { class: 'mini danger', onclick: async () => {
           if (!confirm('Supprimer ce don ?')) return;
@@ -880,6 +897,8 @@ export function initPartenaires(ctx) {
           if (error) { toast('Erreur : ' + error.message); return; }
           toast('Don supprimé.'); dessinerDons(zone);
         } }, 'Supprimer'));
+    } else if (['validé', 'envoyé'].includes(d.recu_statut) && !S.gereDons) {
+      actions.append(el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Reçu PDF'));
     } else if (['validé', 'envoyé'].includes(d.recu_statut)) {
       actions.append(el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Reçu PDF'),
         el('button', { class: 'mini' + (d.recu_statut === 'validé' ? ' principal' : ''), onclick: () => envoyerRecu(d, zone) },
@@ -980,7 +999,7 @@ export function initPartenaires(ctx) {
 
   async function formDon(d) {
     const ent = !d || d.donateur_type === 'entreprise';
-    fenetre(d ? 'Modifier le don' : 'Nouveau don', (f) => {
+    fenetre(d ? 'Modifier le don' : (S.gereDons ? 'Nouveau don' : 'Demande de don (validation par le bureau)'), (f) => {
       const type = el('select', { class: 'champ' }, el('option', { value: 'entreprise', selected: ent }, 'Entreprise (Cerfa 16216)'),
         el('option', { value: 'particulier', selected: !ent }, 'Particulier : licencié, parent, autre (Cerfa 11580)'));
       const selEnt = el('select', { class: 'champ' }, el('option', { value: '' }, 'Entreprise du module Partenaires (facultatif)'),
@@ -1027,12 +1046,26 @@ export function initPartenaires(ctx) {
               donateur_adresse: vide(adr.value) ? casseAdresse(adr.value) : null, donateur_cp: vide(cp.value), donateur_ville: vide(ville.value) ? casseNom(ville.value) : null,
               donateur_email: vide(mail.value), montant: m, date_don: date.value, moyen: moyen.value, nature: nature.value, forme: forme.value,
               description: vide(desc.value), commentaire: vide(com.value), modifie_le: new Date().toISOString() };
-            const { error } = d ? await sb.from('dons').update(ligne).eq('id', d.id)
-                                : await sb.from('dons').insert({ ...ligne, club_id: S.clubId });
+            const { data: cree, error } = d ? await sb.from('dons').update(ligne).eq('id', d.id).select('id').single()
+                                : await sb.from('dons').insert({ ...ligne, club_id: S.clubId }).select('id').single();
             if (error) { toast('Erreur : ' + error.message); return; }
-            fermer(); toast(d ? 'Don modifié.' : 'Don enregistré : reçu à valider.'); S.vue = 'dons'; S.anneeDons = date.value.slice(0, 4); dessiner();
+            fermer();
+            if (!d && !S.gereDons && cree) {
+              // Demande de la commission : avis par e-mail au bureau (trésorier, secrétaire, présidents)
+              const r = await appelRecu({ action: 'avis_demande', don: cree.id });
+              toast(r.msg ? 'Demande enregistrée, avis au bureau non envoyé : ' + r.msg : 'Demande enregistrée : le bureau est prévenu par e-mail.');
+            } else toast(d ? 'Don modifié.' : 'Don enregistré : reçu à valider.');
+            S.vue = 'dons'; S.anneeDons = date.value.slice(0, 4); dessiner();
           } }, 'Enregistrer')));
     });
+  }
+
+  // Appel de la fonction Edge « recu-fiscal » : { data, msg } (msg = message d'erreur lisible)
+  async function appelRecu(body) {
+    const { data, error } = await sb.functions.invoke('recu-fiscal', { body });
+    let msg = data && data.erreur;
+    if (error && !msg) { try { msg = (await error.context.json()).erreur; } catch (e) { msg = error.message; } }
+    return { data, msg };
   }
 
   // Reçu en PDF sur le modèle officiel (fonction Edge « recu-fiscal ») : aperçu « non valable » tant
