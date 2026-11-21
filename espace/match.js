@@ -12,7 +12,8 @@
          - Statistiques : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs
            de la saison. Toute l'équipe pour les coachs, administrateurs et présidents ; chaque joueur et sa
            famille seulement pour lui (contrôlé par la base : fonctions match_direct et stats_equipe).
-  Version : 1.3 - 21/11/2026 - listes de joueurs limitées aux convoqués non absents (toute l'équipe sur demande dans la composition) ; titulaires en vert
+  Version : 1.4 - 21/11/2026 - listes du direct : « Sur le terrain » puis « Remplaçants » une fois la composition enregistrée ; remplacement : sortant parmi le terrain, entrant parmi les remplaçants
+            1.3 - 21/11/2026 - listes de joueurs limitées aux convoqués non absents (toute l'équipe sur demande dans la composition) ; titulaires en vert
             1.2 - 21/11/2026 - photos du match (dépôt, validation par l'encadrement, visionneuse)
             1.1 - 21/11/2026 - matchs sans heure (minuit, « Horaire à confirmer ») : pas de minute calculée, statut « Jour de match »
             1.0 - 21/11/2026 - première version
@@ -169,8 +170,23 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
         mode = 'form'; dessiner();
         const joueurs = proposes(false);
         const tit = new Set(d.titulaires);
-        const selJ = (vide, filtre) => el('select', { class: 'champ' }, el('option', { value: '' }, vide),
-          joueurs.filter(filtre || (() => true)).map(j => el('option', { value: j.id }, j.nom + (j.reponse === 'absent' ? ' (absent)' : ''))));
+        // Joueurs sur le terrain : titulaires, plus les entrants, moins les sortants (dans l'ordre du fil)
+        const parNom = new Map(d.joueurs.map(j => [j.nom, j.id]));
+        const terrain = new Set(tit);
+        for (const f of d.faits.filter(x => x.type === 'remplacement')) {
+          if (f.sortant && parNom.has(f.sortant)) terrain.delete(parNom.get(f.sortant));
+          if (f.joueur_id) terrain.add(f.joueur_id);
+        }
+        const opt = (j) => el('option', { value: j.id }, j.nom + (j.reponse === 'absent' ? ' (absent)' : ''));
+        // groupe : 'tous' (sur le terrain puis remplaçants), 'terrain' ou 'banc'
+        const selJ = (vide, groupe = 'tous') => {
+          const sur = joueurs.filter(j => terrain.has(j.id)), banc = joueurs.filter(j => !terrain.has(j.id));
+          const s = el('select', { class: 'champ' }, el('option', { value: '' }, vide));
+          if (!terrain.size) { joueurs.forEach(j => s.append(opt(j))); return s; }
+          if (groupe !== 'banc' && sur.length) s.append(el('optgroup', { label: 'Sur le terrain' }, sur.map(opt)));
+          if (groupe !== 'terrain' && banc.length) s.append(el('optgroup', { label: 'Remplaçants' }, banc.map(opt)));
+          return s;
+        };
         const m = minuteCourante(d);
         const minute = el('input', { class: 'champ', type: 'number', min: 0, max: 150, inputmode: 'numeric', value: m === null ? '' : String(Math.min(m, d.evt.duree)) });
         const com = el('input', { class: 'champ', maxlength: 200, placeholder: type === 'note' ? 'Ex. belle action collective, blessure...' : 'Précision (facultatif)' });
@@ -178,7 +194,7 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
         const champs = [];
         if (type === 'but') { j1 = selJ('Buteur (vide : contre son camp adverse)'); j2 = selJ('Passeur (facultatif)'); champs.push(lib('Buteur', j1), lib('Passe décisive', j2)); }
         if (type === 'remplacement') {
-          j2 = selJ('Joueur qui sort'); j1 = selJ('Joueur qui entre');
+          j2 = selJ('Joueur qui sort', 'terrain'); j1 = selJ('Joueur qui entre', 'banc');
           champs.push(lib('Sort', j2), lib('Entre', j1));
         }
         if (type === 'jaune' || type === 'rouge') { j1 = selJ('Joueur'); champs.push(lib('Joueur', j1)); }

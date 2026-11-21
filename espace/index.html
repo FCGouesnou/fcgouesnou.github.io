@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.38.1 - 21/11/2026 - direct : joueurs convoqués seulement, titulaires en vert pour faire ressortir « Enregistrer la composition »
+  Version : 0.38.2 - 21/11/2026 - direct : joueurs regroupés « Sur le terrain » et « Remplaçants »
+            0.38.1 - 21/11/2026 - direct : joueurs convoqués seulement, titulaires en vert pour faire ressortir « Enregistrer la composition »
             0.38 - 21/11/2026 - accès des enfants dès U12, ouvert par les parents (« Accès de mes enfants »), parents prévenus de chaque réponse
             0.37 - 21/11/2026 - bouton « Matchs passés » (À venir et Mes équipes) : direct, photos et composition des matchs déjà joués
             0.36 - 21/11/2026 - modules chargés à la demande : Partenaires et Attestations seulement pour les rôles concernés, aide et direct au premier usage
@@ -697,7 +698,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     // Modules chargés à la demande (seulement pour les rôles concernés, ou au premier usage) :
     // un parent ne télécharge jamais les modules Partenaires et Attestations.
-    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.9', match: './match.js?v=1.3' };
+    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.9', match: './match.js?v=1.4' };
     const ROLES_PARTENAIRES = ['admin', 'codir', 'partenaires', 'secretariat', 'finances'];
     const ROLES_ATTESTATIONS = ['admin', 'finances', 'secretariat'];
 
@@ -708,7 +709,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.38.1';
+    const VERSION_APPLI = '0.38.2';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
