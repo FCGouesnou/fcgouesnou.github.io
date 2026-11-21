@@ -12,7 +12,8 @@
          - Statistiques : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs
            de la saison. Toute l'équipe pour les coachs, administrateurs et présidents ; chaque joueur et sa
            famille seulement pour lui (contrôlé par la base : fonctions match_direct et stats_equipe).
-  Version : 1.2 - 21/11/2026 - photos du match (dépôt, validation par l'encadrement, visionneuse)
+  Version : 1.3 - 21/11/2026 - listes de joueurs limitées aux convoqués non absents (toute l'équipe sur demande dans la composition) ; titulaires en vert
+            1.2 - 21/11/2026 - photos du match (dépôt, validation par l'encadrement, visionneuse)
             1.1 - 21/11/2026 - matchs sans heure (minuit, « Horaire à confirmer ») : pas de minute calculée, statut « Jour de match »
             1.0 - 21/11/2026 - première version
 */
@@ -106,16 +107,21 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
         const tit = new Set(d.titulaires);
         const compo = el('details', { class: 'aide-rubrique' }, el('summary', {}, 'Composition de départ (' + tit.size + ')'));
         if (saisie) {
-          const presents = d.joueurs.slice().sort((a, b) => rang(a) - rang(b) || a.nom.localeCompare(b.nom, 'fr'));
+          let toute = false;
           const puces = el('div', { class: 'raci-filtres direct-compo' });
           const choix = new Set(tit);
-          const dessinerPuces = () => puces.replaceChildren(...presents.map(j => el('button', {
-            class: 'raci-puce' + (choix.has(j.id) ? ' actif' : ''),
-            onclick: () => { choix.has(j.id) ? choix.delete(j.id) : choix.add(j.id); dessinerPuces(); } },
-            j.nom + (j.reponse === 'absent' ? ' (absent)' : ''))));
+          const bascule = el('button', { class: 'lien-mini' });
+          const dessinerPuces = () => {
+            puces.replaceChildren(...proposes(toute).map(j => el('button', {
+              class: 'raci-puce' + (choix.has(j.id) ? ' actif' : ''),
+              onclick: () => { choix.has(j.id) ? choix.delete(j.id) : choix.add(j.id); dessinerPuces(); } },
+              (choix.has(j.id) ? '✓ ' : '') + j.nom + (j.reponse === 'absent' ? ' (absent)' : !j.reponse ? ' (non convoqué)' : ''))));
+            bascule.textContent = toute ? 'Ne montrer que les convoqués' : 'Afficher toute l\'équipe';
+          };
+          bascule.onclick = () => { toute = !toute; dessinerPuces(); };
           dessinerPuces();
           compo.append(el('div', { class: 'aide-texte' },
-            el('p', { class: 'petit' }, 'Touchez les joueurs qui commencent le match : le temps de jeu en dépend.'), puces,
+            el('p', { class: 'petit' }, 'Touchez les joueurs convoqués qui commencent le match (en vert) : le temps de jeu en dépend. ', bascule), puces,
             el('button', { class: 'mini principal', onclick: async () => {
               const { error: e3 } = await sb.rpc('match_titulaires_enregistrer', { ev, p_ids: [...choix] });
               if (e3) { erreur(e3); return; }
@@ -147,12 +153,21 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
         } else if (d.delegue) corps.append(el('p', { class: 'petit' }, 'Délégué du match : ' + d.delegue.nom + '.'));
         if (lecture) corps.append(el('p', { class: 'petit' }, 'Aperçu en lecture seule.'));
       }
+      // Joueurs proposés : les convoqués qui n'ont pas répondu « absent » (toute l'équipe si personne n'est convoqué),
+      // plus les titulaires déjà choisis
+      function proposes(tout) {
+        const conv = d.joueurs.filter(j => j.reponse && j.reponse !== 'absent');
+        const base = tout || !conv.length ? d.joueurs : conv;
+        const ids = new Set(base.map(j => j.id));
+        return base.concat(d.joueurs.filter(j => !ids.has(j.id) && d.titulaires.includes(j.id)))
+          .sort((a, b) => rang(a) - rang(b) || a.nom.localeCompare(b.nom, 'fr'));
+      }
       function rang(j) { return { present: 0, incertain: 1, sans_reponse: 2 }[j.reponse] ?? (j.reponse === 'absent' ? 4 : 3); }
 
       // Formulaire d'une action
       function formulaire(type) {
         mode = 'form'; dessiner();
-        const joueurs = d.joueurs.slice().sort((a, b) => rang(a) - rang(b) || a.nom.localeCompare(b.nom, 'fr'));
+        const joueurs = proposes(false);
         const tit = new Set(d.titulaires);
         const selJ = (vide, filtre) => el('select', { class: 'champ' }, el('option', { value: '' }, vide),
           joueurs.filter(filtre || (() => true)).map(j => el('option', { value: j.id }, j.nom + (j.reponse === 'absent' ? ' (absent)' : ''))));
