@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.35 - 21/11/2026 - photos du match (bouton « 📷 Photos » du direct) : dépôt par l'équipe, validation par l'encadrement
+  Version : 0.36 - 21/11/2026 - modules chargés à la demande : Partenaires et Attestations seulement pour les rôles concernés, aide et direct au premier usage
+            0.35 - 21/11/2026 - photos du match (bouton « 📷 Photos » du direct) : dépôt par l'équipe, validation par l'encadrement
             0.34.1 - 21/11/2026 - iPhone : plus de zoom automatique en touchant un champ (écran trop large après une saisie)
             0.34 - 21/11/2026 - aide illustrée : captures d'écran dans les rubriques, agrandissables
             0.33 - 21/11/2026 - « ? » > Signaler : bug, évolution ou question avec captures d'écran ; Administration > Retours
@@ -685,10 +686,11 @@
 
   <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-    import { initPartenaires } from './partenaires.js?v=2.2';
-    import { initAttestations } from './attestations.js?v=1.1';
-    import { initAide } from './aide.js?v=1.7';
-    import { initMatch } from './match.js?v=1.2';
+    // Modules chargés à la demande (seulement pour les rôles concernés, ou au premier usage) :
+    // un parent ne télécharge jamais les modules Partenaires et Attestations.
+    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.7', match: './match.js?v=1.2' };
+    const ROLES_PARTENAIRES = ['admin', 'codir', 'partenaires', 'secretariat', 'finances'];
+    const ROLES_ATTESTATIONS = ['admin', 'finances', 'secretariat'];
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -697,7 +699,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.35';
+    const VERSION_APPLI = '0.36';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -977,12 +979,22 @@
     let vue = 'avenir';
     let P = null, partenairesOk = false, A = null, attestationsOk = false;
     async function preparerPartenaires() {
-      if (!P) P = initPartenaires({ sb, el, toast });
-      partenairesOk = await P.initialiser();
+      const { data: roles } = await sb.rpc('mes_roles');
+      const r = (roles || []).map(x => x.role);
+      partenairesOk = false; attestationsOk = false;
+      try {
+        if (r.some(x => ROLES_PARTENAIRES.includes(x))) {
+          if (!P) P = (await import(MODULES.partenaires)).initPartenaires({ sb, el, toast });
+          partenairesOk = await P.initialiser();
+        }
+        if (r.some(x => ROLES_ATTESTATIONS.includes(x))) {
+          if (!A) A = (await import(MODULES.attestations)).initAttestations({ sb, el, toast });
+          attestationsOk = await A.initialiser();
+        }
+      } catch (e) { toast('Module non chargé : ' + (e.message || e)); }
       document.querySelector('.onglet[data-vue="partenaires"]').hidden = !partenairesOk;
-      if (!A) A = initAttestations({ sb, el, toast });
-      attestationsOk = await A.initialiser();
       document.querySelector('.onglet[data-vue="attestations"]').hidden = !attestationsOk;
+      if ((vue === 'partenaires' && !partenairesOk) || (vue === 'attestations' && !attestationsOk)) vue = 'avenir';
       afficher();
     }
     function afficher() {
@@ -2091,15 +2103,26 @@
     $('btnApercu').addEventListener('click', choisirApercu);
 
     // ---------- Aide (bouton « ? ») : rubriques selon le profil, onglet affiché ouvert d'office ----------
-    const aide = initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte: () => {
+    let aideModule = null;
+    const contexteAide = () => {
       const famille = [...E.personnes.values()].some(x => x.enfant);
       const ECRANS = { avenir: 'À venir', coach: 'Mes équipes', partenaires: 'Partenaires', attestations: 'Attestations', frais: 'Frais des coachs', admin: 'Administration' };
       return { coach: E.coachees.size > 0, famille, joueur: !famille && [...E.miennes].some(id => !E.coachees.has(id)), vue, apercu: !!AP.actif,
         version: VERSION_APPLI, ecran: ECRANS[vue] || vue, uid: session && session.user.id, fiche: (E.fiches[0] || {}).id, club: (E.fiches[0] || {}).club_id };
-    } });
-    $('btnAide').addEventListener('click', () => aide.ouvrir());
-    // Direct du match et statistiques (module match.js)
-    const MT = initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enApercu: () => !!AP.actif });
+    };
+    $('btnAide').addEventListener('click', async () => {
+      try {
+        if (!aideModule) aideModule = (await import(MODULES.aide)).initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte: contexteAide });
+        aideModule.ouvrir();
+      } catch (e) { toast('Aide non chargée : ' + (e.message || e)); }
+    });
+    // Direct du match, photos et statistiques (module match.js, chargé au premier usage)
+    let matchModule = null;
+    async function chargerMatch() {
+      if (!matchModule) matchModule = (await import(MODULES.match)).initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enApercu: () => !!AP.actif });
+      return matchModule;
+    }
+    const MT = new Proxy({}, { get: (_, nom) => (...args) => chargerMatch().then(m => m[nom](...args)).catch(e => toast('Erreur : ' + (e.message || e))) });
     async function verifierAdmin() {
       const { data } = await sbReel.rpc('mes_roles');
       AP.suisAdmin = (data || []).some(r => r.role === 'admin');
