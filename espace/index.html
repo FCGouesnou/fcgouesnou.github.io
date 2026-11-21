@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.30 - 21/11/2026 - pastille « Horaire à confirmer » sur les matchs sans heure (U12-U13 : heure SportEasy non fiable)
+  Version : 0.30.1 - 21/11/2026 - un match sans heure reste affiché toute la journée du match (À venir, Mes équipes, Prochain match)
+            0.30 - 21/11/2026 - pastille « Horaire à confirmer » sur les matchs sans heure (U12-U13 : heure SportEasy non fiable)
             0.29 - 21/11/2026 - direct du match (buts, passes, remplacements, cartons, composition, délégué du jour)
             et statistiques des joueurs (module match.js)
             0.28 - 21/11/2026 - motifs d'absence lus par la fonction convocation_motifs : visibles du joueur, de sa famille,
@@ -630,7 +631,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.30';
+    const VERSION_APPLI = '0.30.1';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -702,6 +703,8 @@
     const sansHeure = (evt) => heure(evt.debut) === '00 h 00' && !evt.fin;
     const avecGroupes = (equipeId) => { const q = E.equipes.get(equipeId); return q && q.sous_groupes && q.sous_groupes.length ? q.sous_groupes : null; };
     const estMatch = (evt) => evt.type === 'match' || evt.type === 'tournoi';
+    // Événement encore à afficher : commencé il y a moins de 3 h, ou sans heure et prévu aujourd'hui
+    const aVenir = (e) => new Date(e.debut).getTime() > Date.now() - 3 * 3600 * 1000 || (sansHeure(e) && cleJour(e.debut) === cleJour(new Date()));
     const fmtJourCourt = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, day: 'numeric', month: 'long' });
     const jourCourt = (d) => fmtJourCourt.format(new Date(d));
 
@@ -873,7 +876,8 @@
 
       E.evenements = []; E.convocations = []; E.resumes = new Map(); E.covoit = new Map(); E.taches = new Map();
       if (idsEq.length) {
-        const depuis = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+        // Depuis minuit (heure de Paris) : un match sans heure du jour reste chargé ; filtré ensuite par aVenir()
+        const depuis = new Date(Math.min(Date.now() - 3 * 3600 * 1000, Date.now() - (Date.now() - new Date(cleJour(new Date()) + 'T00:00:00').getTime()) - 2 * 3600 * 1000)).toISOString();
         const jusqua = new Date(Date.now() + 28 * 86400 * 1000).toISOString();
         const { data: evts } = await sb.from('evenements').select('*, terrain:terrains(lat, lon)').in('equipe_id', idsEq).gte('debut', depuis).lte('debut', jusqua).order('debut').limit(150);
         // Les sondages SportEasy annulés (« Présence des joueurs ») ne sont pas affichés
@@ -1507,11 +1511,11 @@
     function afficherAvenir() {
       const zone = $('vueAvenir'); zone.replaceChildren();
       const mesEvt = new Set(E.convocations.map(c => c.evenement_id));
-      const liste = E.evenements.filter(e => mesEvt.has(e.id) || (E.coachees.has(e.equipe_id) && E.miennes.has(e.equipe_id)));
+      const liste = E.evenements.filter(aVenir).filter(e => mesEvt.has(e.id) || (E.coachees.has(e.equipe_id) && E.miennes.has(e.equipe_id)));
       if (!E.fiches.length) { zone.append(el('p', { class: 'vide' }, "Votre compte n'est relié à aucune fiche du club. Contactez-nous par la rubrique « Nous contacter » du site.")); return; }
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir pour le moment.')); return; }
       // Le prochain match (non annulé) est mis en vedette, puis retiré de la liste
-      const prochain = liste.find(e => estMatch(e) && e.etat !== 'annule' && new Date(e.debut) > new Date(Date.now() - 2 * 3600 * 1000));
+      const prochain = liste.find(e => estMatch(e) && e.etat !== 'annule' && (new Date(e.debut) > new Date(Date.now() - 2 * 3600 * 1000) || (sansHeure(e) && cleJour(e.debut) === cleJour(new Date()))));
       if (prochain) zone.append(heroMatch(prochain, true));
       let jour = '';
       for (const evt of liste) {
@@ -1527,7 +1531,7 @@
     // ---------- Vue coach ----------
     async function afficherCoach() {
       const zone = $('vueCoach'); zone.replaceChildren();
-      const liste = E.evenements.filter(e => E.coachees.has(e.equipe_id));
+      const liste = E.evenements.filter(aVenir).filter(e => E.coachees.has(e.equipe_id));
       // Tâches de match de chaque équipe coachée (lavage, matériel, vestiaire...)
       const eqs = [...E.coachees].map(id => E.equipes.get(id)).filter(Boolean);
       if (eqs.length) zone.append(el('div', { class: 'taches-equipes' },
