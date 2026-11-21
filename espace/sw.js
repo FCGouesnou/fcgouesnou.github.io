@@ -4,7 +4,9 @@
   Rôle : service worker de l'application installable - affichage des notifications reçues,
          ouverture de l'application au toucher, page de secours hors connexion.
          Aucune donnée du club n'est mise en cache : l'application est toujours chargée en ligne.
-  Version : 1.0 - 12/11/2026
+  Version : 1.1 - 21/11/2026 - application déjà ouverte : le lien de la notification (ex. fiche du match)
+            est transmis à l'application au lieu d'être ignoré
+           1.0 - 12/11/2026
 */
 const CACHE = 'fcg-espace-1.0';
 const SECOURS = ['./', './icone-192.png'];
@@ -46,7 +48,7 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = (e.notification.data && e.notification.data.url) || './';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((fenetres) => {
-    for (const f of fenetres) if (f.url.includes('/espace/') && 'focus' in f) { f.postMessage('actualiser'); return f.focus(); }
+    for (const f of fenetres) if (f.url.includes('/espace/') && 'focus' in f) { f.postMessage({ actualiser: true, url }); return f.focus(); }
     return self.clients.openWindow(url);
   }));
 });

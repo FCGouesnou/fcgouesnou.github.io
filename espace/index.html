@@ -6,7 +6,11 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.14.1 - 20/11/2026 - Attestations 1.1 (PDF signé et envoi par e-mail)
+  Version : 0.15 - 21/11/2026 - fiche de match et tâches du match : ligne « Tâches » sur les cartes de match
+           (prendre, libérer, confier), fiche du match pour les coachs et dirigeants (réponses, covoiturage, tâches),
+           ouverte aussi par le lien de la notification (?fiche=), tâches de match par équipe (coachs) ;
+           service worker 1.1
+           0.14.1 - 20/11/2026 - Attestations 1.1 (PDF signé et envoi par e-mail)
            0.14 - 20/11/2026 - onglet « Attestations » (trésorier, secrétaire, administrateurs) : demandes
            d'attestation de licence, contrôle, actions du bureau, licences de la saison (module attestations.js 1.0)
            0.13.6 - 17/11/2026 - Partenaires 1.9 (archivage des entreprises)
@@ -215,6 +219,14 @@
     .ligne-joueur { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--gris-clair); }
     .ligne-joueur:last-child { border-bottom: 0; }
     .actions-coach { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .taches-equipes { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+    .fm-titre { font-weight: 700; color: var(--bleu); font-size: 1.02rem; margin-bottom: 2px; }
+    .fm-section { margin: 14px 0 4px; font-weight: 600; color: var(--bleu); font-size: .9rem; border-top: 1px solid var(--gris-clair); padding-top: 10px; }
+    .fm-ligne { font-size: .88rem; margin: 3px 0; }
+    .fm-ligne span.gris { color: var(--gris); }
+    .tm-ligne { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--gris-clair); font-size: .9rem; }
+    .tm-ligne small { display: block; color: var(--gris); }
+    .tm-ligne input[type=checkbox] { margin-top: 3px; width: 18px; height: 18px; }
     .mini { border: 0; border-radius: 8px; padding: 8px 10px; font-size: .82rem; font-weight: 600; cursor: pointer; background: var(--bleu-clair); color: var(--bleu); }
     .mini.danger { background: var(--rouge-clair); color: var(--rouge); }
     .mini.principal { background: var(--bleu); color: #fff; }
@@ -294,7 +306,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.14.1 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.15 - pilote</p>
     </main>
   </div>
 
@@ -324,7 +336,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.14.1 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.15 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -352,7 +364,8 @@
     // Pendant un aperçu, toute écriture est refusée côté écran et les fonctions qui dépendent
     // de la personne connectée renvoient les valeurs calculées pour la personne observée.
     const AP = { actif: null, suisAdmin: false };
-    const RPC_LECTURE = new Set(['covoiturage_evenements', 'covoit_candidats', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord']);
+    const RPC_LECTURE = new Set(['covoiturage_evenements', 'covoit_candidats', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord',
+                                 'taches_evenement', 'fiche_match', 'taches_candidats', 'taches_equipe']);
     const MSG_APERCU = 'Aperçu en lecture seule : aucune modification n\'est enregistrée.';
     function refus() {
       const r = { data: null, error: { message: MSG_APERCU } };
@@ -398,7 +411,7 @@
     let session = null;
     let emailEnCours = '';
     const E = { fiches: [], personnes: new Map(), repondPour: new Set(), equipes: new Map(), coachees: new Set(), miennes: new Set(),
-                evenements: [], convocations: [], resumes: new Map(), clubs: new Map(), covoit: new Map() };
+                evenements: [], convocations: [], resumes: new Map(), clubs: new Map(), covoit: new Map(), taches: new Map() };
 
     // ---------- Outils ----------
     function toast(t) { const n = $('toast'); n.textContent = t; n.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => n.hidden = true, 3200); }
@@ -413,6 +426,8 @@
     const sansHeure = (evt) => heure(evt.debut) === '00 h 00' && !evt.fin;
     const avecGroupes = (equipeId) => { const q = E.equipes.get(equipeId); return q && q.sous_groupes && q.sous_groupes.length ? q.sous_groupes : null; };
     const estMatch = (evt) => evt.type === 'match' || evt.type === 'tournoi';
+    const fmtJourCourt = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, day: 'numeric', month: 'long' });
+    const jourCourt = (d) => fmtJourCourt.format(new Date(d));
 
     function messageErreur(error) {
       const m = (error && error.message || '').toLowerCase();
@@ -435,6 +450,8 @@
     // ---------- Connexion ----------
     const params = new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, ''));
     if (params.get('error_description')) erreurConnexion(messageErreur({ message: params.get('error_description') }));
+    // Lien d'une notification « Fiche du match » : lu avant que l'adresse ne soit nettoyée à la connexion
+    let ficheDemandee = params.get('fiche');
 
     $('btnGoogle').addEventListener('click', async () => {
       erreurConnexion('');
@@ -501,7 +518,7 @@
         for (const q of eqs || []) E.equipes.set(q.id, q);
       }
 
-      E.evenements = []; E.convocations = []; E.resumes = new Map(); E.covoit = new Map();
+      E.evenements = []; E.convocations = []; E.resumes = new Map(); E.covoit = new Map(); E.taches = new Map();
       if (idsEq.length) {
         const depuis = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
         const jusqua = new Date(Date.now() + 28 * 86400 * 1000).toISOString();
@@ -526,7 +543,7 @@
           }
           E.resumes.set(id, lignes);
         }));
-        await chargerCovoit();
+        await Promise.all([chargerCovoit(), chargerTaches()]);
       }
       afficher();
     }
@@ -863,6 +880,168 @@
       });
     }
 
+    // ---------- Tâches du match et fiche du match ----------
+    // Tâches proposées sur chaque match ou tournoi à venir (modèles du club, adaptés par équipe) ;
+    // les coachs et dirigeants voient tout, les parents seulement les tâches qui leur sont ouvertes.
+    async function chargerTaches(ids) {
+      const evs = ids || E.evenements.filter(covoitPossible).map(e => e.id);
+      await Promise.all(evs.map(async (id) => {
+        const { data, error } = await sb.rpc('taches_evenement', { ev: id });
+        if (!error) E.taches.set(id, data || []);
+      }));
+    }
+    function blocTaches(evt) {
+      if (!covoitPossible(evt)) return null;
+      const t = E.taches.get(evt.id) || [];
+      const coach = E.coachees.has(evt.equipe_id);
+      if (!t.length && !coach) return null;
+      const prises = t.filter(x => x.personne_id).length;
+      const miennes = t.filter(x => x.mien).map(x => x.libelle);
+      const texte = el('div', { class: 'texte' }, el('strong', {}, 'Tâches : '),
+        t.length ? prises + ' sur ' + t.length + ' prise' + (prises > 1 ? 's' : '') : 'aucune tâche pour ce match',
+        miennes.length ? el('div', {}, 'Vous : ' + miennes.join(', ')) : null);
+      return el('div', { class: 'covoit' }, texte,
+        t.length ? el('button', { class: 'mini', onclick: () => ouvrirTaches(evt) }, 'Tâches') : null,
+        coach ? el('button', { class: 'mini', onclick: () => ouvrirFiche(evt.id) }, 'Fiche du match') : null);
+    }
+    async function actionTache(evt, promesse, message) {
+      const { error } = await promesse;
+      if (error) { toast('Erreur : ' + (error.message || error)); return; }
+      await chargerTaches([evt.id]);
+      toast(message); afficher(); ouvrirTaches(evt);
+    }
+    async function ouvrirTaches(evt) {
+      const coach = E.coachees.has(evt.equipe_id);
+      let candidats = [];
+      if (coach && !AP.actif) { const { data } = await sb.rpc('taches_candidats', { ev: evt.id }); candidats = data || []; }
+      const t = E.taches.get(evt.id) || [];
+      const cmp = (a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' });
+      ouvrirFenetre('Tâches - ' + titre(evt), (f) => {
+        f.append(el('p', { class: 'petit' }, jourDe(evt.debut) + (sansHeure(evt) ? '' : ', ' + heure(evt.debut)) + '. ' +
+          (coach ? 'Prenez une tâche ou confiez-la : la personne reçoit une notification.' : 'Ces tâches sont ouvertes aux parents ; merci à ceux qui les prennent.')));
+        if (!t.length) f.append(el('p', { class: 'petit' }, 'Aucune tâche pour ce match.'));
+        for (const x of t) {
+          const b = el('div', { class: 'cv-bloc' },
+            el('div', { class: 'cv-titre' }, el('span', {}, x.libelle),
+              el('span', { class: x.personne_id ? 'plein' : 'libre' }, x.personne_id ? x.responsable + (x.mien ? ' (vous)' : '') : 'À prendre')),
+            x.rotation && x.chez ? el('div', { class: 'cv-info' }, 'Maillots chez ' + x.chez + ' depuis le match du ' + jourCourt(x.chez_depuis)) : null);
+          const a = el('div', { class: 'cv-actions' });
+          if (!x.personne_id)
+            a.append(el('button', { class: 'mini principal', onclick: () =>
+              actionTache(evt, sb.rpc('tache_prendre', { ev: evt.id, p_modele: x.modele_id }), 'Tâche prise. Merci !') }, 'Je prends'));
+          if (x.personne_id && (x.mien || coach))
+            a.append(el('button', { class: 'mini danger', onclick: () => {
+              if (!confirm((x.mien ? 'Vous ne pouvez plus vous charger de « ' : 'Libérer « ') + x.libelle + ' » ?')) return;
+              actionTache(evt, sb.rpc('tache_liberer', { ev: evt.id, p_modele: x.modele_id }), 'Tâche libérée.');
+            } }, x.mien ? 'Je ne peux plus' : 'Libérer'));
+          if (coach && candidats.length) {
+            // Coachs et dirigeants ; parents des joueurs seulement pour les tâches qui leur sont ouvertes
+            const coachs = candidats.filter(c => c.coach).sort((u, v) => cmp(u.nom, v.nom));
+            const parJoueur = new Map();
+            if (x.ouvert_parents) for (const c of candidats.filter(c => !c.coach)) { if (!parJoueur.has(c.joueur)) parJoueur.set(c.joueur, []); parJoueur.get(c.joueur).push(c); }
+            const sel = el('select', { class: 'mini' }, el('option', { value: '' }, x.personne_id ? 'Confier à quelqu\'un d\'autre' : 'Confier à...'),
+              coachs.length ? el('optgroup', { label: 'Coachs et dirigeants' }, coachs.map(c => el('option', { value: c.personne_id }, c.nom))) : null,
+              [...parJoueur.keys()].sort(cmp).map(j => el('optgroup', { label: 'Parents de ' + j }, parJoueur.get(j).sort((u, v) => cmp(u.nom, v.nom)).map(c => el('option', { value: c.personne_id }, c.nom)))));
+            sel.addEventListener('change', () => {
+              if (!sel.value) return;
+              actionTache(evt, sb.rpc('tache_prendre', { ev: evt.id, p_modele: x.modele_id, p_personne: sel.value }), 'Tâche confiée. La personne est prévenue.');
+            });
+            a.append(sel);
+          }
+          if (a.childNodes.length) b.append(a);
+          f.append(b);
+        }
+        f.append(el('div', { class: 'boutons', style: 'flex-wrap:wrap' },
+          coach ? el('button', { class: 'btn secondaire', onclick: () => ouvrirFiche(evt.id) }, 'Fiche du match') : null,
+          coach ? el('button', { class: 'btn secondaire', onclick: () => gererTaches(evt.equipe_id) }, 'Tâches de l\'équipe') : null,
+          el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+      });
+    }
+
+    // Fiche du match : réservée aux coachs, dirigeants et administrateurs ; envoyée 24 h avant par notification
+    async function ouvrirFiche(id) {
+      const [{ data: fi, error }, { data: taches }] = await Promise.all([sb.rpc('fiche_match', { ev: id }), sb.rpc('taches_evenement', { ev: id })]);
+      if (error) { toast('Erreur : ' + error.message); return; }
+      if (!fi) { toast('La fiche du match est réservée aux coachs et dirigeants de l\'équipe.'); return; }
+      const evt = E.evenements.find(e => e.id === id);
+      const noms = (l) => l && l.length ? l.join(', ') : 'personne';
+      const nb = (n, s) => n + ' ' + s + (n > 1 ? 's' : '');
+      ouvrirFenetre('Fiche du match', (f) => {
+        const r = fi.reponses || {};
+        f.append(el('div', { class: 'fm-titre' }, fi.libelle),
+          el('p', { class: 'petit' }, jourDe(fi.debut) + (fi.rdv ? ', rendez-vous ' + heure(fi.rdv) : '') + ', match ' + heure(fi.debut) +
+            (fi.domicile === false ? ' (extérieur)' : ' (domicile)') + (fi.lieu ? ' - ' + fi.lieu : '')));
+        f.append(el('div', { class: 'fm-section' }, 'Joueurs : ' + nb(r.present || 0, 'présent') + ', ' + nb(r.incertain || 0, 'incertain') + ', ' +
+          (r.sans_reponse || 0) + ' sans réponse, ' + nb(r.absent || 0, 'absent')),
+          el('div', { class: 'fm-ligne' }, el('strong', {}, 'Présents : '), noms(fi.presents)),
+          fi.incertains.length ? el('div', { class: 'fm-ligne' }, el('strong', {}, 'Incertains : '), noms(fi.incertains)) : null,
+          fi.sans_reponse.length ? el('div', { class: 'fm-ligne' }, el('strong', {}, 'Sans réponse : '), noms(fi.sans_reponse)) : null,
+          fi.absents.length ? el('div', { class: 'fm-ligne' }, el('strong', {}, 'Absents : '), noms(fi.absents)) : null);
+        f.append(el('div', { class: 'fm-section' }, 'Covoiturage : ' + nb(fi.voitures.length, 'voiture')));
+        for (const v of fi.voitures)
+          f.append(el('div', { class: 'fm-ligne' }, el('strong', {}, v.conducteur), ' (' + v.passagers.length + ' sur ' + v.places + ' place' + (v.places > 1 ? 's' : '') + ')',
+            v.designation === 'en_attente' ? el('span', { class: 'gris' }, ' - désignation en attente de réponse') : null,
+            (v.depart || v.heure) ? el('span', { class: 'gris' }, ' - départ' + (v.depart ? ' ' + v.depart : '') + (v.heure ? ' à ' + heure(v.heure) : '')) : null,
+            v.passagers.length ? el('div', { class: 'gris', style: 'padding-left:12px' }, v.passagers.join(', ')) : null));
+        if (fi.domicile === false && fi.sans_place.length) f.append(el('div', { class: 'fm-ligne' }, el('strong', {}, 'Sans place : '), noms(fi.sans_place)));
+        if (fi.demandes.length) f.append(el('div', { class: 'fm-ligne' }, el('strong', {}, 'Cherchent une place : '), noms(fi.demandes)));
+        const t = taches || [];
+        f.append(el('div', { class: 'fm-section' }, 'Tâches : ' + t.filter(x => x.personne_id).length + ' sur ' + t.length + ' prises'));
+        for (const x of t) f.append(el('div', { class: 'fm-ligne' }, x.libelle + ' : ',
+          x.personne_id ? el('strong', {}, x.responsable) : el('span', { style: 'color:var(--orange);font-weight:600' }, 'à prendre'),
+          x.rotation && x.chez ? el('span', { class: 'gris' }, ' (maillots chez ' + x.chez + ')') : null));
+        f.append(el('div', { class: 'boutons', style: 'flex-wrap:wrap' },
+          evt ? el('button', { class: 'btn secondaire', onclick: () => ouvrirTaches(evt) }, 'Tâches') : null,
+          evt ? el('button', { class: 'btn secondaire', onclick: () => ouvrirCovoit(evt) }, 'Covoiturage') : null,
+          el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+      });
+    }
+
+    // Tâches de match d'une équipe (coachs) : tâches du club à garder ou retirer, tâches propres à l'équipe
+    async function gererTaches(equipeId) {
+      const { data, error } = await sb.rpc('taches_equipe', { p_equipe: equipeId });
+      if (error) { toast('Erreur : ' + error.message); return; }
+      const q = E.equipes.get(equipeId);
+      const LIB_QUAND = { toujours: 'tous les matchs', exterieur: 'matchs à l\'extérieur', domicile: 'matchs à domicile' };
+      const apres = async (message) => { toast(message); await chargerTaches(); afficher(); gererTaches(equipeId); };
+      ouvrirFenetre('Tâches de match - ' + (q ? q.nom : ''), (f) => {
+        f.append(el('p', { class: 'petit' }, 'Ces tâches apparaissent sur chaque match de l\'équipe. Décochez une tâche du club pour la retirer de vos matchs ; ajoutez les vôtres en bas.'));
+        for (const m of data || []) {
+          const detail = el('small', {}, LIB_QUAND[m.quand] + (m.ouvert_parents ? ' · ouverte aux parents' : '') + (m.du_club ? '' : ' · propre à l\'équipe'));
+          if (m.du_club) {
+            const cb = el('input', { type: 'checkbox', checked: m.active });
+            cb.addEventListener('change', async () => {
+              const { error: e2 } = await sb.rpc('tache_modele_activer', { p_equipe: equipeId, p_modele: m.id, p_active: cb.checked });
+              if (e2) { cb.checked = !cb.checked; toast('Erreur : ' + e2.message); return; }
+              apres(cb.checked ? 'Tâche remise sur les matchs.' : 'Tâche retirée des matchs de l\'équipe.');
+            });
+            f.append(el('label', { class: 'tm-ligne' }, cb, el('span', {}, m.libelle, detail)));
+          } else {
+            f.append(el('div', { class: 'tm-ligne' }, el('span', { style: 'flex:1' }, m.libelle, detail),
+              el('button', { class: 'mini danger', onclick: async () => {
+                if (!confirm('Supprimer la tâche « ' + m.libelle + ' » ?')) return;
+                const { error: e2 } = await sb.rpc('tache_modele_activer', { p_equipe: equipeId, p_modele: m.id, p_active: false });
+                if (e2) { toast('Erreur : ' + e2.message); return; }
+                apres('Tâche supprimée.');
+              } }, 'Supprimer')));
+          }
+        }
+        const lib = el('input', { class: 'champ', placeholder: 'Nouvelle tâche (ex. Goûter, Feuille de match)', maxlength: 60 });
+        const quand = el('select', { class: 'champ' }, Object.entries(LIB_QUAND).map(([k, v]) => el('option', { value: k }, 'Pour les ' + v)));
+        const parents = el('input', { type: 'checkbox' });
+        f.append(el('div', { class: 'fm-section' }, 'Ajouter une tâche'), lib, quand,
+          el('label', { class: 'tm-ligne', style: 'border:0' }, parents, el('span', {}, 'Ouverte aux parents', el('small', {}, 'Sinon réservée aux coachs et dirigeants'))),
+          el('div', { class: 'boutons' },
+            el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer'),
+            el('button', { class: 'btn principal', onclick: async () => {
+              if (!lib.value.trim()) { toast('Indiquez le nom de la tâche.'); lib.focus(); return; }
+              const { error: e2 } = await sb.rpc('tache_modele_ajouter', { p_equipe: equipeId, p_libelle: lib.value.trim(), p_quand: quand.value, p_parents: parents.checked });
+              if (e2) { toast('Erreur : ' + e2.message); return; }
+              apres('Tâche ajoutée.');
+            } }, 'Ajouter')));
+      });
+    }
+
     function carteEvenement(evt, avecReponses) {
       const c = el('div', { class: 'evt' + (evt.etat === 'annule' ? ' annule' : '') },
         el('div', { class: 'evt-tete' }, el('div', { class: 'evt-titre' }, titre(evt)), ...pastilles(evt)),
@@ -871,6 +1050,7 @@
       if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) c.append(blocReponse(evt, cv));
       const cpt = compteur(evt); if (cpt) c.append(cpt);
       const cv = blocCovoit(evt); if (cv) c.append(cv);
+      const tc = blocTaches(evt); if (tc) c.append(tc);
       return c;
     }
 
@@ -894,6 +1074,10 @@
     async function afficherCoach() {
       const zone = $('vueCoach'); zone.replaceChildren();
       const liste = E.evenements.filter(e => E.coachees.has(e.equipe_id));
+      // Tâches de match de chaque équipe coachée (lavage, matériel, vestiaire...)
+      const eqs = [...E.coachees].map(id => E.equipes.get(id)).filter(Boolean);
+      if (eqs.length) zone.append(el('div', { class: 'taches-equipes' },
+        eqs.map(q => el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom))));
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir. Créez-en un avec le bouton « + Nouvel événement ».')); return; }
       let jour = '';
       for (const evt of liste) {
@@ -1179,7 +1363,14 @@
     let enregistrementSW = null;
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').then(r => { enregistrementSW = r; if (session) majCarteNotif(); }).catch(() => {});
-      navigator.serviceWorker.addEventListener('message', (e) => { if (e.data === 'actualiser' && session) charger(); });
+      navigator.serviceWorker.addEventListener('message', async (e) => {
+        if (!session || !(e.data === 'actualiser' || (e.data && e.data.actualiser))) return;
+        await charger();
+        // Toucher une notification « Fiche du match » alors que l'application est déjà ouverte
+        const url = e.data && e.data.url ? new URL(e.data.url, location.href) : null;
+        const fiche = url && url.searchParams.get('fiche');
+        if (fiche) ouvrirFiche(fiche);
+      });
     }
     window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); invitationInstall = e; if (session) majCarteNotif(); });
 
@@ -1562,7 +1753,11 @@
       $('ecranConnexion').hidden = !!s;
       $('ecranAppli').hidden = !s;
       if (!s) { AP.actif = null; AP.suisAdmin = false; dessinerBandeau(); $('btnApercu').hidden = true; $('carteSportEasy').hidden = true; }
-      if (s) setTimeout(() => { charger(); majCarteNotif(); preparerPartenaires(); verifierAdmin(); }, 0);
+      if (s) setTimeout(async () => {
+        majCarteNotif(); preparerPartenaires(); verifierAdmin();
+        await charger();
+        if (ficheDemandee) { const id = ficheDemandee; ficheDemandee = null; ouvrirFiche(id); }
+      }, 0);
     }
     sb.auth.onAuthStateChange((evenement, s) => {
       if (s && (location.search || location.hash)) history.replaceState(null, '', ADRESSE_APPLI);
