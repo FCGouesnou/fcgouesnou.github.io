@@ -9,7 +9,8 @@
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
          Captures d'écran (dossier espace/aide, images WebP) : produites à partir de la vraie application
          avec des données fictives, régénérées à chaque version qui change l'apparence (IMAGES_VERSION).
-  Version : 1.8 - 21/11/2026 - bouton « Matchs passés »
+  Version : 1.9 - 21/11/2026 - accès des enfants dès U12, ouvert par les parents
+            1.8 - 21/11/2026 - bouton « Matchs passés »
             1.7 - 21/11/2026 - photos du match dans la rubrique du direct
             1.6 - 21/11/2026 - captures d'écran dans les rubriques (touchez une image pour l'agrandir)
             1.5 - 21/11/2026 - onglet « Signaler » : bug, évolution ou question, avec captures d'écran, suivi des demandes
@@ -58,6 +59,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         'Les prénoms et réponses des autres convoqués sont visibles, jamais leurs motifs.',
         'Un désistement après « Présent » prévient le coach : changez votre réponse dès que possible.',
         'Un joueur répond lui-même à partir de 16 ans ; ses parents gardent la main.'),
+      p.famille ? P(B('Dès U12'), ', vous pouvez autoriser votre enfant à répondre lui-même depuis son téléphone : bouton « 🧒 Accès de mes enfants » en haut de « À venir », avec sa propre adresse e-mail. Vous êtes prévenu de chacune de ses réponses et pouvez la modifier ; il ne voit ni le covoiturage, ni les tâches, ni les téléphones. Vous pouvez retirer cet accès à tout moment.') : null,
       p.famille ? P('Pendant le pilote, les réponses aux convocations se font uniquement ici, plus dans SportEasy.') : null,
     ] },
     { id: 'covoiturage', titre: 'Covoiturage', vues: ['avenir'], pour: (p) => p.famille || p.coach, captures: () => [['covoiturage', 'Voitures proposées et places recherchées']], contenu: () => [
@@ -158,7 +160,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     ] },
   ];
   // Version des captures : à changer à chaque régénération, pour contourner le cache des téléphones
-  const IMAGES_VERSION = '0.37';
+  const IMAGES_VERSION = '0.38';
   function galerie(liste) {
     if (!liste || !liste.length) return null;
     return el('div', { class: 'aide-captures' }, liste.map(([nom, legende]) => {

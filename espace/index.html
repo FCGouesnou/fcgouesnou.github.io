@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.37 - 21/11/2026 - bouton « Matchs passés » (À venir et Mes équipes) : direct, photos et composition des matchs déjà joués
+  Version : 0.38 - 21/11/2026 - accès des enfants dès U12, ouvert par les parents (« Accès de mes enfants »), parents prévenus de chaque réponse
+            0.37 - 21/11/2026 - bouton « Matchs passés » (À venir et Mes équipes) : direct, photos et composition des matchs déjà joués
             0.36 - 21/11/2026 - modules chargés à la demande : Partenaires et Attestations seulement pour les rôles concernés, aide et direct au premier usage
             0.35 - 21/11/2026 - photos du match (bouton « 📷 Photos » du direct) : dépôt par l'équipe, validation par l'encadrement
             0.34.1 - 21/11/2026 - iPhone : plus de zoom automatique en touchant un champ (écran trop large après une saisie)
@@ -476,6 +477,10 @@
     .aide-rubrique > summary::after { content: '+'; float: right; font-weight: 700; color: var(--bleu); }
     .aide-rubrique[open] > summary::after { content: '-'; }
     .aide-texte { padding-bottom: 12px; font-size: .92rem; line-height: 1.5; }
+    .carte-enfant { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; background: #eef6ff; border: 1px solid #cfe3ff; grid-column: 1 / -1; }
+    .acces-bloc { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 12px 14px; margin: 10px 0; display: grid; gap: 8px; }
+    .carte-enfant .boutons-carte { display: flex; gap: 6px; }
+    .case { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; } .case input { width: auto; margin-top: 3px; }
     .photos-depot { display: grid; gap: 6px; margin: 8px 0 4px; } .photos-depot p:empty { display: none; }
     .photos-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 6px 0 10px; }
     .photo-carte { margin: 0; position: relative; display: grid; gap: 4px; }
@@ -689,7 +694,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     // Modules chargés à la demande (seulement pour les rôles concernés, ou au premier usage) :
     // un parent ne télécharge jamais les modules Partenaires et Attestations.
-    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.8', match: './match.js?v=1.2' };
+    const MODULES = { partenaires: './partenaires.js?v=2.2', attestations: './attestations.js?v=1.1', aide: './aide.js?v=1.9', match: './match.js?v=1.2' };
     const ROLES_PARTENAIRES = ['admin', 'codir', 'partenaires', 'secretariat', 'finances'];
     const ROLES_ATTESTATIONS = ['admin', 'finances', 'secretariat'];
 
@@ -700,7 +705,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.37';
+    const VERSION_APPLI = '0.38';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -908,7 +913,7 @@
       let fiches = null;
       if (AP.actif) fiches = AP.actif.fiches;
       else {
-        const { data, error: e1 } = await sb.from('personnes').select('id, prenom, nom, annee_naissance, club_id').eq('user_id', uid);
+        const { data, error: e1 } = await sb.from('personnes').select('id, prenom, nom, annee_naissance, club_id, acces_autorise_le').eq('user_id', uid);
         if (e1) { toast('Erreur de chargement : ' + e1.message); return; }
         fiches = data;
       }
@@ -921,7 +926,9 @@
         for (const c of cl || []) E.clubs.set(c.id, c);
       }
       const ageReponse = (p) => (E.clubs.get(p.club_id) || {}).age_majorite || 18;
-      E.repondPour = new Set(E.fiches.filter(p => age(p) === null || age(p) >= ageReponse(p)).map(p => p.id));
+      E.repondPour = new Set(E.fiches.filter(p => age(p) === null || age(p) >= ageReponse(p) || p.acces_autorise_le).map(p => p.id));
+      // Compte enfant : accès ouvert par les parents avant 15 ans (pas de covoiturage, pas de tâches, pas de téléphones)
+      E.compteEnfant = E.fiches.some(p => p.acces_autorise_le && age(p) !== null && age(p) < 15);
 
       if (AP.actif) {
         for (const x of AP.actif.enfants) { E.personnes.set(x.id, { ...x, enfant: true }); E.repondPour.add(x.id); }
@@ -931,6 +938,9 @@
           .select('enfant_id, enfant:personnes!liens_famille_enfant_id_fkey(id, prenom, nom, annee_naissance, club_id)')
           .in('parent_id', ids);
         for (const l of enfants || []) if (l.enfant) { E.personnes.set(l.enfant.id, { ...l.enfant, enfant: true }); E.repondPour.add(l.enfant.id); }
+        // Accès des enfants de 11 à 14 ans, ouvert par les parents
+        E.accesEnfants = [];
+        if ((enfants || []).length) { const { data: ae } = await sb.rpc('mes_enfants_acces'); E.accesEnfants = ae || []; }
       }
 
       const [{ data: mesEq }, { data: coachEq }] = await Promise.all([sb.rpc('mes_equipes'), sb.rpc('equipes_coachees')]);
@@ -1526,8 +1536,7 @@
         evt.consignes ? el('div', { class: 'consignes' }, evt.consignes) : null);
       if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) c.append(blocReponse(evt, cv));
       const cpt = compteur(evt); if (cpt) c.append(cpt);
-      const cv = blocCovoit(evt); if (cv) c.append(cv);
-      const tc = blocTaches(evt); if (tc) c.append(tc);
+      if (!E.compteEnfant) { const cv = blocCovoit(evt); if (cv) c.append(cv); const tc = blocTaches(evt); if (tc) c.append(tc); }
       const dr = blocDirect(evt); if (dr) c.append(dr);
       return c;
     }
@@ -1585,8 +1594,7 @@
       const corps = c.lastChild;
       if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) corps.append(blocReponse(evt, cv));
       if (presence) corps.append(presence);
-      const cvt = blocCovoit(evt); if (cvt) corps.append(cvt);
-      const tc = blocTaches(evt); if (tc) corps.append(tc);
+      if (!E.compteEnfant) { const cvt = blocCovoit(evt); if (cvt) corps.append(cvt); const tc = blocTaches(evt); if (tc) corps.append(tc); }
       const dr = blocDirect(evt); if (dr) corps.append(dr);
       const l = listeConvoques(evt); if (l) corps.append(l);
       return c;
@@ -1606,7 +1614,17 @@
       const mesEvt = new Set(E.convocations.map(c => c.evenement_id));
       const liste = E.evenements.filter(aVenir).filter(e => mesEvt.has(e.id) || (E.coachees.has(e.equipe_id) && E.miennes.has(e.equipe_id)));
       if (!E.fiches.length) { zone.append(el('p', { class: 'vide' }, "Votre compte n'est relié à aucune fiche du club. Contactez-nous par la rubrique « Nous contacter » du site.")); return; }
-      if (E.miennes.size || E.coachees.size) zone.append(el('div', { class: 'taches-equipes' }, boutonMatchsPasses()));
+      const eligibles = (E.accesEnfants || []).filter(x => x.eligible);
+      if (E.miennes.size || E.coachees.size) zone.append(el('div', { class: 'taches-equipes' }, boutonMatchsPasses(),
+        eligibles.length ? el('button', { class: 'mini', onclick: ouvrirAccesEnfants }, '🧒 Accès de mes enfants') : null));
+      const aProposer = eligibles.filter(x => !x.autorise_le);
+      let masque = false; try { masque = localStorage.getItem('fcg-acces-enfant-plus-tard') === '1'; } catch (e) {}
+      if (aProposer.length && !masque && !AP.actif) zone.append(el('div', { class: 'carte-notif carte-enfant' },
+        el('div', {}, el('strong', {}, aProposer.map(x => x.prenom).join(' et ') + (aProposer.length > 1 ? ' peuvent' : ' peut') + ' répondre ' + (aProposer.length > 1 ? 'eux-mêmes' : 'lui-même') + ' à ses convocations'),
+          el('div', { class: 'petit' }, 'Avec votre accord, depuis son téléphone. Vous êtes prévenu à chacune de ses réponses et gardez la main.')),
+        el('div', { class: 'boutons-carte' },
+          el('button', { class: 'mini principal', onclick: ouvrirAccesEnfants }, 'Autoriser'),
+          el('button', { class: 'mini', onclick: () => { try { localStorage.setItem('fcg-acces-enfant-plus-tard', '1'); } catch (e) {} afficher(); } }, 'Plus tard'))));
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir pour le moment.')); return; }
       // Le prochain match (non annulé) est mis en vedette, puis retiré de la liste
       const prochain = liste.find(e => estMatch(e) && e.etat !== 'annule' && (new Date(e.debut) > new Date(Date.now() - 2 * 3600 * 1000) || (sansHeure(e) && cleJour(e.debut) === cleJour(new Date()))));
@@ -1622,9 +1640,43 @@
       }
     }
 
+    // ---------- Accès des enfants (11 à 14 ans), ouvert par les parents ----------
+    function ouvrirAccesEnfants() {
+      const liste = (E.accesEnfants || []).filter(x => x.eligible);
+      ouvrirFenetre('Mon enfant répond lui-même', (f) => {
+        f.append(el('p', { class: 'petit' }, 'À partir de U12, votre enfant peut répondre lui-même à ses convocations, depuis son téléphone, avec sa propre adresse e-mail (il reçoit un code de connexion, sans mot de passe). Vous êtes prévenu à chacune de ses réponses et pouvez la modifier. Il ne voit ni le covoiturage, ni les tâches, ni aucun numéro de téléphone.'));
+        for (const x of liste) {
+          const bloc = el('div', { class: 'acces-bloc' }, el('div', { class: 'p-ligne-nom' }, x.prenom + ' ' + x.nom, el('small', {}, x.age + ' ans')));
+          if (x.autorise_le) {
+            bloc.append(el('p', { class: 'petit' }, '✅ Accès autorisé le ' + new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, day: 'numeric', month: 'long' }).format(new Date(x.autorise_le))
+              + (x.autorise_par ? ' par ' + x.autorise_par : '') + ' · ' + x.email + (x.connecte ? ' · déjà connecté' : ' · pas encore connecté')),
+              el('button', { class: 'mini danger', onclick: async () => {
+                if (!confirm('Retirer l\'accès de ' + x.prenom + ' ? Il ne pourra plus se connecter.')) return;
+                const { error } = await sb.rpc('retirer_acces_enfant', { p_enfant: x.id });
+                if (error) { toast('Erreur : ' + error.message); return; }
+                toast('Accès retiré.'); await charger(); ouvrirAccesEnfants();
+              } }, 'Retirer l\'accès'));
+          } else {
+            const champ = el('input', { class: 'champ', type: 'email', placeholder: 'Adresse e-mail de ' + x.prenom, autocomplete: 'off' });
+            const accord = el('input', { type: 'checkbox' });
+            bloc.append(champ, el('label', { class: 'petit case' }, accord, ' J\'autorise ' + x.prenom + ' à se connecter et à répondre à ses convocations.'),
+              el('button', { class: 'mini principal', onclick: async () => {
+                if (!accord.checked) { toast('Cochez la case d\'autorisation.'); return; }
+                const { error } = await sb.rpc('autoriser_acces_enfant', { p_enfant: x.id, p_email: champ.value });
+                if (error) { toast('Erreur : ' + error.message); return; }
+                toast('C\'est fait : ' + x.prenom + ' peut se connecter sur fcgouesnou.github.io/espace avec cette adresse.'); await charger(); ouvrirAccesEnfants();
+              } }, 'Autoriser ' + x.prenom));
+          }
+          f.append(bloc);
+        }
+        if (!liste.length) f.append(el('p', { class: 'vide' }, 'Aucun enfant de 11 à 14 ans rattaché à votre compte.'));
+        f.append(el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+      });
+    }
+
     // ---------- Matchs passés : direct, photos et score des matchs déjà joués (120 derniers jours) ----------
     function boutonMatchsPasses() {
-      return el('button', { class: 'mini principal', onclick: ouvrirMatchsPasses }, '⏮ Matchs passés');
+      return el('button', { class: 'mini', onclick: ouvrirMatchsPasses }, '⏮ Matchs passés');
     }
     async function ouvrirMatchsPasses() {
       const ids = [...new Set([...E.miennes, ...E.coachees])];
