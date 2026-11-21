@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.15 - 21/11/2026 - fiche de match et tâches du match : ligne « Tâches » sur les cartes de match
+  Version : 0.15.1 - 21/11/2026 - nettoyage du vestiaire confié aux coachs jusqu'aux U13 et aux joueurs ensuite
+           (tâches « joueurs » à partir d'un âge) ; un joueur répond lui-même dès l'âge fixé par le club (16 ans)
+           0.15 - 21/11/2026 - fiche de match et tâches du match : ligne « Tâches » sur les cartes de match
            (prendre, libérer, confier), fiche du match pour les coachs et dirigeants (réponses, covoiturage, tâches),
            ouverte aussi par le lien de la notification (?fiche=), tâches de match par équipe (coachs) ;
            service worker 1.1
@@ -306,7 +308,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.15 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.15.1 - pilote</p>
     </main>
   </div>
 
@@ -336,7 +338,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.15 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.15.1 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -496,7 +498,14 @@
       }
       E.fiches = fiches || [];
       E.personnes = new Map(E.fiches.map(p => [p.id, { ...p, moi: true }]));
-      E.repondPour = new Set(E.fiches.filter(p => age(p) === null || age(p) >= 18).map(p => p.id));
+      // Âge à partir duquel un joueur répond lui-même (réglage du club, 16 ans au FC Gouesnou) ; les parents gardent la main
+      const clubIds = [...new Set(E.fiches.map(p => p.club_id))];
+      if (clubIds.length) {
+        const { data: cl } = await sb.from('clubs').select('id, age_majorite').in('id', clubIds);
+        for (const c of cl || []) E.clubs.set(c.id, c);
+      }
+      const ageReponse = (p) => (E.clubs.get(p.club_id) || {}).age_majorite || 18;
+      E.repondPour = new Set(E.fiches.filter(p => age(p) === null || age(p) >= ageReponse(p)).map(p => p.id));
 
       if (AP.actif) {
         for (const x of AP.actif.enfants) { E.personnes.set(x.id, { ...x, enfant: true }); E.repondPour.add(x.id); }
@@ -918,7 +927,7 @@
       const cmp = (a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' });
       ouvrirFenetre('Tâches - ' + titre(evt), (f) => {
         f.append(el('p', { class: 'petit' }, jourDe(evt.debut) + (sansHeure(evt) ? '' : ', ' + heure(evt.debut)) + '. ' +
-          (coach ? 'Prenez une tâche ou confiez-la : la personne reçoit une notification.' : 'Ces tâches sont ouvertes aux parents ; merci à ceux qui les prennent.')));
+          (coach ? 'Prenez une tâche ou confiez-la : la personne reçoit une notification (et ses parents pour un joueur mineur).' : 'Merci à ceux qui prennent ces tâches.')));
         if (!t.length) f.append(el('p', { class: 'petit' }, 'Aucune tâche pour ce match.'));
         for (const x of t) {
           const b = el('div', { class: 'cv-bloc' },
@@ -935,12 +944,15 @@
               actionTache(evt, sb.rpc('tache_liberer', { ev: evt.id, p_modele: x.modele_id }), 'Tâche libérée.');
             } }, x.mien ? 'Je ne peux plus' : 'Libérer'));
           if (coach && candidats.length) {
-            // Coachs et dirigeants ; parents des joueurs seulement pour les tâches qui leur sont ouvertes
+            // Coachs et dirigeants ; parents des joueurs pour les tâches qui leur sont ouvertes ;
+            // joueurs à partir de l'âge prévu pour les tâches « joueurs » (vestiaire à partir des U14)
             const coachs = candidats.filter(c => c.coach).sort((u, v) => cmp(u.nom, v.nom));
+            const joueurs = x.joueurs_age_min ? candidats.filter(c => c.age !== null && c.age >= x.joueurs_age_min).sort((u, v) => cmp(u.nom, v.nom)) : [];
             const parJoueur = new Map();
-            if (x.ouvert_parents) for (const c of candidats.filter(c => !c.coach)) { if (!parJoueur.has(c.joueur)) parJoueur.set(c.joueur, []); parJoueur.get(c.joueur).push(c); }
+            if (x.ouvert_parents) for (const c of candidats.filter(c => !c.coach && c.joueur)) { if (!parJoueur.has(c.joueur)) parJoueur.set(c.joueur, []); parJoueur.get(c.joueur).push(c); }
             const sel = el('select', { class: 'mini' }, el('option', { value: '' }, x.personne_id ? 'Confier à quelqu\'un d\'autre' : 'Confier à...'),
               coachs.length ? el('optgroup', { label: 'Coachs et dirigeants' }, coachs.map(c => el('option', { value: c.personne_id }, c.nom))) : null,
+              joueurs.length ? el('optgroup', { label: 'Joueurs' }, joueurs.map(c => el('option', { value: c.personne_id }, c.nom))) : null,
               [...parJoueur.keys()].sort(cmp).map(j => el('optgroup', { label: 'Parents de ' + j }, parJoueur.get(j).sort((u, v) => cmp(u.nom, v.nom)).map(c => el('option', { value: c.personne_id }, c.nom)))));
             sel.addEventListener('change', () => {
               if (!sel.value) return;
@@ -1007,7 +1019,8 @@
       ouvrirFenetre('Tâches de match - ' + (q ? q.nom : ''), (f) => {
         f.append(el('p', { class: 'petit' }, 'Ces tâches apparaissent sur chaque match de l\'équipe. Décochez une tâche du club pour la retirer de vos matchs ; ajoutez les vôtres en bas.'));
         for (const m of data || []) {
-          const detail = el('small', {}, LIB_QUAND[m.quand] + (m.ouvert_parents ? ' · ouverte aux parents' : '') + (m.du_club ? '' : ' · propre à l\'équipe'));
+          const detail = el('small', {}, LIB_QUAND[m.quand] + (m.ouvert_parents ? ' · ouverte aux parents' : '') +
+            (m.joueurs_age_min ? ' · confiée aux joueurs de ' + m.joueurs_age_min + ' ans et plus' : '') + (m.du_club ? '' : ' · propre à l\'équipe'));
           if (m.du_club) {
             const cb = el('input', { type: 'checkbox', checked: m.active });
             cb.addEventListener('change', async () => {
