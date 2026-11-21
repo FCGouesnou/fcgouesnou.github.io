@@ -6,10 +6,14 @@
            cartons, notes), composition de départ, délégué du jour. Saisie par les coachs, dirigeants,
            administrateurs et le délégué désigné par le coach ; lecture par toute l'équipe et les présidents.
            Actualisation automatique toutes les 30 secondes pendant que la fenêtre est ouverte.
+         - Photos du match : chacun dépose ses photos (réduites dans le navigateur : 1600 px et miniature 480 px) ;
+           visibles de l'équipe après validation par l'encadrement (coachs, dirigeants, délégué), dont les photos
+           sont validées d'office ; copiées chaque nuit dans le Drive de photos@ (fonction match_photos et suivantes).
          - Statistiques : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs
            de la saison. Toute l'équipe pour les coachs, administrateurs et présidents ; chaque joueur et sa
            famille seulement pour lui (contrôlé par la base : fonctions match_direct et stats_equipe).
-  Version : 1.1 - 21/11/2026 - matchs sans heure (minuit, « Horaire à confirmer ») : pas de minute calculée, statut « Jour de match »
+  Version : 1.2 - 21/11/2026 - photos du match (dépôt, validation par l'encadrement, visionneuse)
+            1.1 - 21/11/2026 - matchs sans heure (minuit, « Horaire à confirmer ») : pas de minute calculée, statut « Jour de match »
             1.0 - 21/11/2026 - première version
 */
 export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enApercu }) {
@@ -63,6 +67,7 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
           el('div', { class: 'direct-statut' }, statut(d) + ' · ' + fmtJour.format(new Date(d.evt.debut)))),
         corps,
         el('div', { class: 'boutons' },
+          el('button', { class: 'btn secondaire', onclick: () => { fermerSuivi(); ouvrirPhotos(ev, nomEquipe + ' - ' + adv); } }, '📷 Photos'),
           el('button', { class: 'btn secondaire', onclick: () => ouvrirStats(d.evt.equipe_id, nomEquipe) }, 'Statistiques'),
           el('button', { class: 'btn secondaire', onclick: arreterEtFermer }, 'Fermer')));
       dessiner();
@@ -192,6 +197,106 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
       suivi = setInterval(() => { if (!document.body.contains(f)) { fermerSuivi(); return; } if (mode === 'fil' && !f.querySelector('details[open]')) recharger(); }, 30000);
     });
   }
+  // ---------- Photos du match ----------
+  function reduire(fichier, max, qualite) {
+    return new Promise((ok, ko) => {
+      const img = new Image(); const url = URL.createObjectURL(fichier);
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob(b => b ? ok({ blob: b, largeur: c.width, hauteur: c.height }) : ko(new Error('Photo illisible')), 'image/jpeg', qualite);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); ko(new Error('Format de photo non reconnu')); };
+      img.src = url;
+    });
+  }
+  async function liens(chemins) {
+    if (!chemins.length) return {};
+    const { data } = await sb.storage.from('photos').createSignedUrls(chemins, 3600);
+    const m = {}; (data || []).forEach(x => { if (x.signedUrl) m[x.path] = x.signedUrl; }); return m;
+  }
+  async function ouvrirPhotos(ev, titre) {
+    const { data: d, error } = await sb.rpc('match_photos', { ev });
+    if (error) { erreur(error); return; }
+    const lecture = enApercu();
+    const photos = d.photos || [];
+    const urls = await liens(photos.map(p => p.miniature));
+    const attente = photos.filter(p => p.statut === 'a_valider');
+    ouvrirFenetre('Photos du match', (f) => {
+      f.classList.add('large');
+      const entree = el('input', { type: 'file', accept: 'image/*', multiple: true, style: 'display:none' });
+      const etat = el('p', { class: 'petit' });
+      entree.addEventListener('change', async () => {
+        const liste = [...entree.files].slice(0, 20); entree.value = '';
+        if (!liste.length) return;
+        let n = 0;
+        for (const [i, fi] of liste.entries()) {
+          etat.textContent = 'Envoi de la photo ' + (i + 1) + ' sur ' + liste.length + '...';
+          try {
+            const [grande, mini] = [await reduire(fi, 1600, 0.82), await reduire(fi, 480, 0.75)];
+            const id = crypto.randomUUID();
+            const chemin = ev + '/' + id + '.jpg', miniature = ev + '/' + id + '_m.jpg';
+            const up1 = await sb.storage.from('photos').upload(chemin, grande.blob, { contentType: 'image/jpeg' });
+            if (up1.error) throw up1.error;
+            const up2 = await sb.storage.from('photos').upload(miniature, mini.blob, { contentType: 'image/jpeg' });
+            if (up2.error) { await sb.storage.from('photos').remove([chemin]); throw up2.error; }
+            const { error: e2 } = await sb.rpc('match_photo_ajouter', { ev, p_chemin: chemin, p_miniature: miniature, p_largeur: grande.largeur, p_hauteur: grande.hauteur, p_legende: null });
+            if (e2) { await sb.storage.from('photos').remove([chemin, miniature]); throw e2; }
+            n++;
+          } catch (e) { toast('Photo ' + (i + 1) + ' non envoyée : ' + (e.message || e)); }
+        }
+        toast(n + ' photo(s) envoyée(s)' + (d.peut_valider ? '.' : ' : visibles de l\'équipe après validation du coach.'));
+        ouvrirPhotos(ev, titre);
+      });
+      const grille = (liste) => el('div', { class: 'photos-grille' }, liste.map(p => el('figure', { class: 'photo-carte' + (p.statut === 'a_valider' ? ' attente' : '') },
+        el('img', { src: urls[p.miniature] || '', alt: p.legende || 'Photo du match', loading: 'lazy', onclick: () => visionneuse(p, photos) }),
+        p.statut === 'a_valider' ? el('span', { class: 'photo-badge' }, 'À valider') : null,
+        d.peut_valider && !lecture && p.statut === 'a_valider' ? el('div', { class: 'photo-actions' },
+          el('button', { class: 'mini principal', onclick: () => valider(p) }, 'Valider'),
+          el('button', { class: 'mini danger', onclick: () => supprimer(p, 'Refuser cette photo ? Elle sera supprimée.') }, 'Refuser')) : null)));
+      const validees = photos.filter(p => p.statut === 'validee');
+      f.append(
+        el('p', { class: 'petit' }, titre + '. ' + (d.peut_valider
+          ? 'Vos photos sont visibles tout de suite ; celles des familles attendent votre accord.'
+          : 'Vos photos seront visibles de l\'équipe après validation du coach.')),
+        lecture ? el('p', { class: 'petit' }, 'Aperçu en lecture seule.') : el('div', { class: 'photos-depot' },
+          el('button', { class: 'btn principal', onclick: () => entree.click() }, '📷 Ajouter des photos'), entree, etat,
+          el('p', { class: 'petit' }, 'Photos réservées à l\'équipe et au club. Respectez le choix des familles qui ne souhaitent pas que leur enfant soit photographié.')),
+        attente.length ? el('h4', { class: 'p-titre' }, (d.peut_valider ? 'À valider' : 'En attente de validation') + ' (' + attente.length + ')') : null,
+        attente.length ? grille(attente) : null,
+        d.peut_valider && attente.length > 1 && !lecture ? el('button', { class: 'mini principal', onclick: async () => { for (const p of attente) await sb.rpc('match_photo_valider', { p_id: p.id, p_ok: true }); toast(attente.length + ' photos validées.'); ouvrirPhotos(ev, titre); } }, 'Tout valider') : null,
+        el('h4', { class: 'p-titre' }, 'Photos du match (' + validees.length + ')'),
+        validees.length ? grille(validees) : el('p', { class: 'vide' }, 'Aucune photo pour l\'instant.'),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => ouvrirDirect(ev) }, 'Retour au direct'),
+          el('button', { class: 'btn secondaire', onclick: fermerFenetre }, 'Fermer')));
+    });
+    async function valider(p) {
+      const { error: e } = await sb.rpc('match_photo_valider', { p_id: p.id, p_ok: true });
+      if (e) { erreur(e); return; }
+      toast('Photo validée.'); ouvrirPhotos(ev, titre);
+    }
+    async function supprimer(p, question) {
+      if (!confirm(question)) return;
+      const { data: fichiers, error: e } = await sb.rpc('match_photo_supprimer', { p_id: p.id });
+      if (e) { erreur(e); return; }
+      if (fichiers && fichiers.length) await sb.storage.from('photos').remove(fichiers);
+      toast('Photo supprimée.'); document.querySelector('.photo-zoom')?.remove(); ouvrirPhotos(ev, titre);
+    }
+    async function visionneuse(p, tous) {
+      const l = await liens([p.chemin]);
+      const peutSuppr = !lecture && (d.peut_valider || (p.mienne && p.statut !== 'validee'));
+      const fond = el('div', { class: 'aide-zoom photo-zoom', onclick: (e) => { if (e.target === fond) fond.remove(); } },
+        el('button', { class: 'fermer-x', 'aria-label': 'Fermer', onclick: () => fond.remove() }, '×'),
+        el('img', { src: l[p.chemin] || urls[p.miniature], alt: p.legende || 'Photo du match' }),
+        el('p', {}, (p.auteur ? 'Photo de ' + p.auteur : 'Photo du match') + (p.statut === 'a_valider' ? ' · à valider' : '')),
+        el('div', { class: 'photo-zoom-actions' },
+          l[p.chemin] ? el('a', { class: 'mini', href: l[p.chemin], download: 'photo-match.jpg', target: '_blank', rel: 'noopener' }, 'Télécharger') : null,
+          peutSuppr ? el('button', { class: 'mini danger', onclick: () => supprimer(p, 'Supprimer cette photo ?') }, 'Supprimer') : null));
+      document.body.append(fond);
+    }
+  }
+
   function fermerSuivi() { if (suivi) { clearInterval(suivi); suivi = null; } }
   function arreterEtFermer() { fermerSuivi(); fermerFenetre(); }
 
@@ -255,5 +360,5 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
         el('span', { class: 'stats-val' }, l[champ] + unite))));
   }
 
-  return { ouvrirDirect, ouvrirStats, fermerSuivi };
+  return { ouvrirDirect, ouvrirStats, ouvrirPhotos, fermerSuivi };
 }

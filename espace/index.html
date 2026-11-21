@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.34.1 - 21/11/2026 - iPhone : plus de zoom automatique en touchant un champ (écran trop large après une saisie)
+  Version : 0.35 - 21/11/2026 - photos du match (bouton « 📷 Photos » du direct) : dépôt par l'équipe, validation par l'encadrement
+            0.34.1 - 21/11/2026 - iPhone : plus de zoom automatique en touchant un champ (écran trop large après une saisie)
             0.34 - 21/11/2026 - aide illustrée : captures d'écran dans les rubriques, agrandissables
             0.33 - 21/11/2026 - « ? » > Signaler : bug, évolution ou question avec captures d'écran ; Administration > Retours
             (statut, réponse, notification à l'auteur)
@@ -473,6 +474,14 @@
     .aide-rubrique > summary::after { content: '+'; float: right; font-weight: 700; color: var(--bleu); }
     .aide-rubrique[open] > summary::after { content: '-'; }
     .aide-texte { padding-bottom: 12px; font-size: .92rem; line-height: 1.5; }
+    .photos-depot { display: grid; gap: 6px; margin: 8px 0 4px; } .photos-depot p:empty { display: none; }
+    .photos-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 6px 0 10px; }
+    .photo-carte { margin: 0; position: relative; display: grid; gap: 4px; }
+    .photo-carte img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; background: #e9eef8; cursor: zoom-in; display: block; }
+    .photo-carte.attente img { outline: 3px solid #f3b33d; outline-offset: -3px; }
+    .photo-badge { position: absolute; top: 6px; left: 6px; background: #f3b33d; color: #3b2a00; font-size: .7rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+    .photo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; } .photo-actions .mini { padding: 6px 4px; font-size: .75rem; min-height: 32px; }
+    .photo-zoom-actions { display: flex; gap: 8px; margin-top: 10px; } .photo-zoom-actions .mini { background: #fff; }
     .aide-captures { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 8px; scroll-snap-type: x mandatory; }
     .aide-captures figure { flex: 0 0 150px; margin: 0; scroll-snap-align: start; cursor: zoom-in; }
     .aide-captures img { width: 150px; aspect-ratio: 585 / 1266; object-fit: cover; object-position: top; border-radius: 14px; border: 3px solid var(--marine); box-shadow: 0 4px 12px rgba(10, 30, 80, .18); display: block; background: #eef2fa; }
@@ -678,8 +687,8 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=2.2';
     import { initAttestations } from './attestations.js?v=1.1';
-    import { initAide } from './aide.js?v=1.6';
-    import { initMatch } from './match.js?v=1.1';
+    import { initAide } from './aide.js?v=1.7';
+    import { initMatch } from './match.js?v=1.2';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -688,7 +697,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.34.1';
+    const VERSION_APPLI = '0.35';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }

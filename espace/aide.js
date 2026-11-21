@@ -9,7 +9,8 @@
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
          Captures d'écran (dossier espace/aide, images WebP) : produites à partir de la vraie application
          avec des données fictives, régénérées à chaque version qui change l'apparence (IMAGES_VERSION).
-  Version : 1.6 - 21/11/2026 - captures d'écran dans les rubriques (touchez une image pour l'agrandir)
+  Version : 1.7 - 21/11/2026 - photos du match dans la rubrique du direct
+            1.6 - 21/11/2026 - captures d'écran dans les rubriques (touchez une image pour l'agrandir)
             1.5 - 21/11/2026 - onglet « Signaler » : bug, évolution ou question, avec captures d'écran, suivi des demandes
             1.4 - 21/11/2026 - rubrique « Direct du match et statistiques »
             1.3 - 21/11/2026 - rubriques « Voir en tant que » (présidents) et onglet Administration
@@ -72,13 +73,17 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         'Le lavage des maillots est ouvert aux parents, en rotation.',
         'Le nettoyage du vestiaire n\'est jamais confié aux parents : les coachs jusqu\'aux U13, les joueurs à partir des U14.'),
     ] },
-    { id: 'direct', titre: 'Direct du match et statistiques', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, captures: (p) => p.coach ? [['direct-saisie', 'Saisie du direct : un bouton par action'], ['statistiques', 'Statistiques de l\'équipe']] : [['direct-famille', 'Le direct, mis à jour toutes les 30 secondes']], contenu: (p) => [
+    { id: 'direct', titre: 'Direct du match, photos et statistiques', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, captures: (p) => p.coach ? [['direct-saisie', 'Saisie du direct : un bouton par action'], ['photos', 'Photos du match : valider celles des familles'], ['statistiques', 'Statistiques de l\'équipe']] : [['direct-famille', 'Le direct, mis à jour toutes les 30 secondes'], ['photos', 'Photos du match, visibles après validation']], contenu: (p) => [
       P('Sur la carte d\'un match, « Suivre le direct » affiche le score et le fil du match : buts (buteur, passeur, minute), remplacements, cartons. L\'écran se met à jour tout seul toutes les 30 secondes.'),
       p.coach ? L([B('Saisie'), ' : un bouton par action (But, But adverse, Remplacement, Carton, Note) ; la minute est proposée d\'après l\'heure du coup d\'envoi, modifiable. Une erreur se supprime avec la croix.'],
           [B('Composition de départ'), ' : touchez les titulaires ; le temps de jeu de chacun en dépend.'],
           [B('Délégué du match'), ' : confiez la saisie à un parent ou un dirigeant présent ; il est prévenu par notification.'],
           [B('Statistiques'), ' (onglet Mes équipes ou depuis le direct) : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs de la saison.'])
         : P('« Statistiques » montre les chiffres de votre enfant (ou les vôtres) : matchs joués, temps de jeu, buts, passes, présence aux entraînements. Ceux de toute l\'équipe sont réservés aux coachs.'),
+      P(B('📷 Photos'), ' (depuis le direct) : ajoutez vos photos du match, réduites automatiquement. ', p.coach
+        ? 'Les vôtres sont visibles tout de suite ; celles des familles attendent votre accord : « Valider » ou « Refuser » (vous êtes prévenu par notification).'
+        : 'Elles sont visibles de l\'équipe après validation du coach ; vous pouvez supprimer les vôtres tant qu\'elles ne sont pas validées.',
+        ' Les photos sont réservées à l\'équipe et au club, et copiées chaque nuit dans le Drive photos du club.'),
     ] },
     { id: 'equipes', titre: 'Mes équipes (coachs et dirigeants)', vues: ['coach'], pour: (p) => p.coach, captures: () => [['mes-equipes', 'Réponses détaillées, relance et modification']], contenu: () => [
       P('L\'onglet « Mes équipes » montre quatre semaines d\'événements avec les réponses détaillées, motifs compris.'),
@@ -151,7 +156,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     ] },
   ];
   // Version des captures : à changer à chaque régénération, pour contourner le cache des téléphones
-  const IMAGES_VERSION = '0.34';
+  const IMAGES_VERSION = '0.35';
   function galerie(liste) {
     if (!liste || !liste.length) return null;
     return el('div', { class: 'aide-captures' }, liste.map(([nom, legende]) => {
