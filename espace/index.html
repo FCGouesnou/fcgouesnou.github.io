@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.33 - 21/11/2026 - « ? » > Signaler : bug, évolution ou question avec captures d'écran ; Administration > Retours
+  Version : 0.34 - 21/11/2026 - aide illustrée : captures d'écran dans les rubriques, agrandissables
+            0.33 - 21/11/2026 - « ? » > Signaler : bug, évolution ou question avec captures d'écran ; Administration > Retours
             (statut, réponse, notification à l'auteur)
             0.32 - 21/11/2026 - heures « 13h30 » ; rendez-vous mis en évidence ; « Modifié » remplacé par un repère
             temporaire (3 jours) indiquant ce qui a changé : heure, rendez-vous ou lieu
@@ -468,6 +469,14 @@
     .aide-rubrique > summary::after { content: '+'; float: right; font-weight: 700; color: var(--bleu); }
     .aide-rubrique[open] > summary::after { content: '-'; }
     .aide-texte { padding-bottom: 12px; font-size: .92rem; line-height: 1.5; }
+    .aide-captures { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 8px; scroll-snap-type: x mandatory; }
+    .aide-captures figure { flex: 0 0 150px; margin: 0; scroll-snap-align: start; cursor: zoom-in; }
+    .aide-captures img { width: 150px; aspect-ratio: 585 / 1266; object-fit: cover; object-position: top; border-radius: 14px; border: 3px solid var(--marine); box-shadow: 0 4px 12px rgba(10, 30, 80, .18); display: block; background: #eef2fa; }
+    .aide-captures figcaption { font-size: .78rem; color: #5a6785; margin-top: 6px; line-height: 1.3; }
+    .aide-zoom { position: fixed; inset: 0; z-index: 2000; background: rgba(8, 20, 50, .88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+    .aide-zoom img { max-width: 100%; max-height: 82dvh; border-radius: 18px; border: 3px solid #fff; }
+    .aide-zoom p { color: #fff; margin: 10px 0 0; text-align: center; font-size: .9rem; }
+    .aide-zoom .fermer-x { position: absolute; top: 14px; right: 14px; }
     .aide-texte p { margin: 6px 0; } .aide-texte ul { margin: 6px 0; padding-left: 20px; } .aide-texte li { margin: 4px 0; }
     .raci-filtres { display: flex; flex-wrap: nowrap; gap: 6px; margin: 10px -4px; padding: 2px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     .raci-filtres::-webkit-scrollbar { display: none; }
@@ -665,7 +674,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=2.2';
     import { initAttestations } from './attestations.js?v=1.1';
-    import { initAide } from './aide.js?v=1.5';
+    import { initAide } from './aide.js?v=1.6';
     import { initMatch } from './match.js?v=1.1';
 
     // ---------- Configuration ----------
@@ -675,7 +684,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.33';
+    const VERSION_APPLI = '0.34';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }

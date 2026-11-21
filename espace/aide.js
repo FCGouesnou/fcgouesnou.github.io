@@ -7,7 +7,10 @@
          Onglet « RACI du bureau » : matrice des responsabilités lue dans la base (tables raci et
          raci_fonctions), réservée au bureau ; chaque ligne peut être ouverte plus tard au CODIR.
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
-  Version : 1.5 - 21/11/2026 - onglet « Signaler » : bug, évolution ou question, avec captures d'écran, suivi des demandes
+         Captures d'écran (dossier espace/aide, images WebP) : produites à partir de la vraie application
+         avec des données fictives, régénérées à chaque version qui change l'apparence (IMAGES_VERSION).
+  Version : 1.6 - 21/11/2026 - captures d'écran dans les rubriques (touchez une image pour l'agrandir)
+            1.5 - 21/11/2026 - onglet « Signaler » : bug, évolution ou question, avec captures d'écran, suivi des demandes
             1.4 - 21/11/2026 - rubrique « Direct du match et statistiques »
             1.3 - 21/11/2026 - rubriques « Voir en tant que » (présidents) et onglet Administration
             1.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau », onglet « RACI »
@@ -38,7 +41,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
   const L = (...items) => el('ul', {}, items.map(x => el('li', {}, x)));
   const B = (t) => el('strong', {}, t);
   const RUBRIQUES = [
-    { id: 'debut', titre: 'Prise en main', pour: () => true, contenu: () => [
+    { id: 'debut', titre: 'Prise en main', pour: () => true, captures: () => [['accueil', 'La carte du prochain match, en haut de l\'onglet À venir']], contenu: () => [
       P('L\'Espace club est l\'application du FC Gouesnou. Elle s\'ouvre à l\'adresse fcgouesnou.github.io/espace, avec votre compte Google du club ou un code reçu par e-mail.'),
       L([B('Installer'), ' : sur iPhone, Safari > Partager > « Sur l\'écran d\'accueil » ; sur Android, bouton « Installer l\'application ».'],
         [B('Notifications'), ' : bouton « Activer » du bandeau. Sur iPhone, l\'application doit être installée. Sans notification, un e-mail vous prévient.'],
@@ -46,7 +49,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         [B('Sortir'), ' vous déconnecte de cet appareil.'],
         'Aucune notification entre 21 h et 8 h, sauf une annulation du jour même.'),
     ] },
-    { id: 'convocations', titre: 'Répondre aux convocations', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, contenu: (p) => [
+    { id: 'convocations', titre: 'Répondre aux convocations', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, captures: () => [['reponse', 'Un geste pour répondre ; l\'heure de rendez-vous est encadrée']], contenu: (p) => [
       P('L\'onglet « À venir » montre les événements de vos équipes et de vos enfants. Répondez en un geste : ', B('Présent'), ', ', B('Absent'), ' ou ', B('Incertain'), '.'),
       L('Date limite : 48 h avant un match, 24 h avant un entraînement. Les retardataires sont relancés.',
         'Le motif d\'absence est facultatif et n\'est vu que par les coachs.',
@@ -55,7 +58,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         'Un joueur répond lui-même à partir de 16 ans ; ses parents gardent la main.'),
       p.famille ? P('Pendant le pilote, les réponses aux convocations se font uniquement ici, plus dans SportEasy.') : null,
     ] },
-    { id: 'covoiturage', titre: 'Covoiturage', vues: ['avenir'], pour: (p) => p.famille || p.coach, contenu: () => [
+    { id: 'covoiturage', titre: 'Covoiturage', vues: ['avenir'], pour: (p) => p.famille || p.coach, captures: () => [['covoiturage', 'Voitures proposées et places recherchées']], contenu: () => [
       P('Pour les matchs et tournois à venir, à domicile comme à l\'extérieur (pas les entraînements).'),
       L([B('Je propose des places'), ' : nombre de places libres pour d\'autres joueurs, sans compter votre enfant, lieu et heure de départ.'],
         [B('Je cherche une place'), ' : la demande disparaît dès qu\'une place est réservée.'],
@@ -63,13 +66,13 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
         'Le coach peut vous désigner comme conducteur : vous êtes notifié et pouvez refuser.',
         'Les téléphones ne sont visibles qu\'entre le conducteur, les familles de ses passagers et les coachs.'),
     ] },
-    { id: 'taches', titre: 'Tâches du match', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, contenu: () => [
+    { id: 'taches', titre: 'Tâches du match', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, captures: () => [['taches', '« Je prends » pour s\'engager sur une tâche']], contenu: () => [
       P('Sur chaque carte de match, la ligne « Tâches » montre qui s\'occupe de quoi : lavage des maillots, ballons, chasubles, gourdes, pharmacie...'),
       L([B('Je prends'), ' pour vous engager, ', B('Je ne peux plus'), ' pour libérer la tâche.'],
         'Le lavage des maillots est ouvert aux parents, en rotation.',
         'Le nettoyage du vestiaire n\'est jamais confié aux parents : les coachs jusqu\'aux U13, les joueurs à partir des U14.'),
     ] },
-    { id: 'direct', titre: 'Direct du match et statistiques', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, contenu: (p) => [
+    { id: 'direct', titre: 'Direct du match et statistiques', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, captures: (p) => p.coach ? [['direct-saisie', 'Saisie du direct : un bouton par action'], ['statistiques', 'Statistiques de l\'équipe']] : [['direct-famille', 'Le direct, mis à jour toutes les 30 secondes']], contenu: (p) => [
       P('Sur la carte d\'un match, « Suivre le direct » affiche le score et le fil du match : buts (buteur, passeur, minute), remplacements, cartons. L\'écran se met à jour tout seul toutes les 30 secondes.'),
       p.coach ? L([B('Saisie'), ' : un bouton par action (But, But adverse, Remplacement, Carton, Note) ; la minute est proposée d\'après l\'heure du coup d\'envoi, modifiable. Une erreur se supprime avec la croix.'],
           [B('Composition de départ'), ' : touchez les titulaires ; le temps de jeu de chacun en dépend.'],
@@ -77,7 +80,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
           [B('Statistiques'), ' (onglet Mes équipes ou depuis le direct) : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs de la saison.'])
         : P('« Statistiques » montre les chiffres de votre enfant (ou les vôtres) : matchs joués, temps de jeu, buts, passes, présence aux entraînements. Ceux de toute l\'équipe sont réservés aux coachs.'),
     ] },
-    { id: 'equipes', titre: 'Mes équipes (coachs et dirigeants)', vues: ['coach'], pour: (p) => p.coach, contenu: () => [
+    { id: 'equipes', titre: 'Mes équipes (coachs et dirigeants)', vues: ['coach'], pour: (p) => p.coach, captures: () => [['mes-equipes', 'Réponses détaillées, relance et modification']], contenu: () => [
       P('L\'onglet « Mes équipes » montre quatre semaines d\'événements avec les réponses détaillées, motifs compris.'),
       L([B('+ Nouvel événement'), ' : match, tournoi, entraînement ou réunion ; lieu choisi par commune puis terrain.'],
         [B('Relancer'), ' les sans-réponse (au plus toutes les 6 heures).'],
@@ -142,11 +145,30 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       P('L\'application garde le minimum : ni adresse postale, ni date de naissance complète, ni numéro de licence pour la vie des équipes. Les moins de 15 ans n\'ont pas de coordonnées propres.'),
       P('Exceptions : l\'adresse des donateurs (reçu fiscal) et les licences de la saison (attestations), lisibles seulement par les présidents, le trésorier et le secrétaire.'),
     ] },
-    { id: 'contact', titre: 'Besoin d\'aide ?', pour: () => true, contenu: (p) => [
+    { id: 'contact', titre: 'Besoin d\'aide ?', pour: () => true, captures: () => [['signaler', 'Onglet Signaler : bug, évolution ou question']], contenu: (p) => [
       P('Onglet « Signaler » ci-dessus : 🐞 un bug, ✨ une idée d\'évolution ou 💬 une question, avec une capture d\'écran si besoin. Vous suivez la réponse dans « Mes demandes ».'),
       P(p.coach || p.famille ? 'Parlez-en d\'abord au coach de l\'équipe. ' : '', 'Pour un problème d\'accès ou de fonctionnement : Ronan Durand, responsable informatique du club, ou la rubrique « Nous contacter » du site.'),
     ] },
   ];
+  // Version des captures : à changer à chaque régénération, pour contourner le cache des téléphones
+  const IMAGES_VERSION = '0.34';
+  function galerie(liste) {
+    if (!liste || !liste.length) return null;
+    return el('div', { class: 'aide-captures' }, liste.map(([nom, legende]) => {
+      const src = 'aide/' + nom + '.webp?v=' + IMAGES_VERSION;
+      return el('figure', { onclick: () => agrandir(src, legende) },
+        el('img', { src, alt: legende, loading: 'lazy' }), el('figcaption', {}, legende));
+    }));
+  }
+  function agrandir(src, legende) {
+    const fond = el('div', { class: 'aide-zoom', onclick: () => fond.remove() },
+      el('button', { class: 'fermer-x', 'aria-label': 'Fermer' }, '×'),
+      el('img', { src, alt: legende }), el('p', {}, legende));
+    const echap = (e) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); fond.remove(); } };
+    const obs = new MutationObserver(() => { if (!fond.isConnected) { document.removeEventListener('keydown', echap, true); obs.disconnect(); } });
+    document.addEventListener('keydown', echap, true); obs.observe(document.body, { childList: true });
+    document.body.append(fond);
+  }
   const RUBRIQUE_VUE = { avenir: 'convocations', coach: 'equipes', partenaires: 'partenaires', attestations: 'attestations', frais: 'frais', admin: 'admin' };
 
   // ---------- Fenêtre ----------
@@ -190,7 +212,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     const ouverte = RUBRIQUE_VUE[p.vue] && actives.some(r => r.id === RUBRIQUE_VUE[p.vue]) ? RUBRIQUE_VUE[p.vue] : 'debut';
     z.replaceChildren(el('p', { class: 'petit' }, 'Aide adaptée à votre profil : ' + profilLisible(p) + '.' + (p.apercu ? ' (Aperçu : profil de la personne observée.)' : '')));
     for (const r of actives) {
-      const d = el('details', { class: 'aide-rubrique' }, el('summary', {}, r.titre), el('div', { class: 'aide-texte' }, r.contenu(p)));
+      const d = el('details', { class: 'aide-rubrique' }, el('summary', {}, r.titre), el('div', { class: 'aide-texte' }, galerie(r.captures && r.captures(p)), r.contenu(p)));
       if (r.id === ouverte) d.open = true;
       z.append(d);
     }
