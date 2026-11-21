@@ -7,7 +7,8 @@
          Onglet « RACI du bureau » : matrice des responsabilités lue dans la base (tables raci et
          raci_fonctions), réservée au bureau ; chaque ligne peut être ouverte plus tard au CODIR.
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
-  Version : 1.1 - 21/11/2026 - prise en main : glisser vers le bas, bouton « Mettre à jour »
+  Version : 1.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau », onglet « RACI »
+            1.1 - 21/11/2026 - prise en main : glisser vers le bas, bouton « Mettre à jour »
             1.0 - 21/11/2026 - première version
 */
 export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte }) {
@@ -93,9 +94,9 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
             [B('Valider le reçu'), ' : numéro définitif AAAA-NNN, jamais libéré. Ne validez jamais un don de test.'],
             'À la validation, un e-mail avec le PDF signé part au trésorier, au secrétaire, aux présidents et à la commission.',
             [B('Envoyer par e-mail'), ' au donateur, depuis contact@ ; ', B('Annuler le reçu'), ' en cas d\'erreur (motif obligatoire), puis nouveau reçu.'],
-            'Une demande de la commission arrive par e-mail au bureau : vérifiez, modifiez si besoin, puis validez.')
-        : L([B('+ Demande de don'), ' : saisissez le donateur, le montant et le mode de paiement. Le bureau est prévenu par e-mail.'],
-            'La validation, la signature et l\'envoi du reçu restent au bureau (présidents, trésorier, secrétaire).',
+            'Une demande de la commission arrive par e-mail aux présidents, au trésorier et au secrétaire : vérifiez, modifiez si besoin, puis validez.')
+        : L([B('+ Demande de don'), ' : saisissez le donateur, le montant et le mode de paiement. Les présidents, le trésorier et le secrétaire sont prévenus par e-mail.'],
+            'La validation, la signature et l\'envoi du reçu restent aux présidents, au trésorier et au secrétaire.',
             'Vous recevez par e-mail chaque reçu créé, avec le PDF.'),
       P('Pour une entreprise, l\'identité légale (raison sociale, SIREN, siège) vient de sa fiche : bouton « Identités à vérifier ».'),
     ] },
@@ -121,7 +122,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     ] },
     { id: 'donnees', titre: 'Vos données', pour: () => true, contenu: () => [
       P('L\'application garde le minimum : ni adresse postale, ni date de naissance complète, ni numéro de licence pour la vie des équipes. Les moins de 15 ans n\'ont pas de coordonnées propres.'),
-      P('Exceptions : l\'adresse des donateurs (reçu fiscal) et les licences de la saison (attestations), lisibles par le bureau seulement.'),
+      P('Exceptions : l\'adresse des donateurs (reçu fiscal) et les licences de la saison (attestations), lisibles seulement par les présidents, le trésorier et le secrétaire.'),
     ] },
     { id: 'contact', titre: 'Besoin d\'aide ?', pour: () => true, contenu: (p) => [
       P(p.coach || p.famille ? 'Parlez-en d\'abord au coach de l\'équipe. ' : '', 'Pour un problème d\'accès ou de fonctionnement : Ronan Durand, responsable informatique du club, ou la rubrique « Nous contacter » du site.'),
@@ -141,7 +142,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       const corps = el('div', {});
       const nav = el('div', { class: 'p-onglets' });
       const dessinerNav = () => {
-        nav.replaceChildren(...[['aide', 'Aide'], ...(p.raci ? [['raci', p.bureau ? 'RACI du bureau' : 'RACI']] : [])].map(([k, t]) =>
+        nav.replaceChildren(...[['aide', 'Aide'], ...(p.raci ? [['raci', 'RACI']] : [])].map(([k, t]) =>
           el('button', { class: 'onglet' + (onglet === k ? ' actif' : ''), onclick: () => { onglet = k; dessinerNav(); dessiner(); } }, t)));
       };
       const dessiner = () => { if (onglet === 'raci') dessinerRaci(corps, p); else dessinerAide(corps, p); };
@@ -153,7 +154,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
   function profilLisible(p) {
     const l = [];
     if (p.admin) l.push('administrateur');
-    if (p.bureau && !p.admin) l.push('bureau');
+    if (p.bureau && !p.admin && !p.roles.has('presidence') && !p.finances && !p.secretariat) l.push('présidents, trésorier, secrétaire');
     if (p.roles.has('presidence')) l.push('présidence');
     if (p.finances) l.push('trésorier');
     if (p.secretariat) l.push('secrétariat');
@@ -192,7 +193,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     const mesFonctions = (fonctions || []).filter(f => f.role_lie && p.roles.has(f.role_lie) && !(f.role_lie === 'codir' && p.bureau)).map(f => f.fonction);
     const note = ((club || [])[0] || {}).raci_note;
     z.replaceChildren(
-      el('p', { class: 'petit' }, 'Qui fait quoi au bureau. ', B('R'), ' réalise, ', B('A'), ' approuve et rend compte (une seule fonction), ', B('C'), ' est consulté avant, ', B('I'), ' est informé après.' + (note ? ' ' + note : '')));
+      el('p', { class: 'petit' }, 'Qui fait quoi entre les présidents, le trésorier, le secrétaire et les commissions. ', B('R'), ' réalise, ', B('A'), ' approuve et rend compte (une seule fonction), ', B('C'), ' est consulté avant, ', B('I'), ' est informé après.' + (note ? ' ' + note : '')));
     // Filtre par fonction
     const puces = el('div', { class: 'raci-filtres' });
     const liste = el('div', { class: 'raci-liste' });
@@ -225,7 +226,7 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
     const legende = el('details', { class: 'aide-rubrique' }, el('summary', {}, 'Qui occupe chaque fonction'),
       el('div', { class: 'aide-texte' }, el('ul', {}, (fonctions || []).map(f => el('li', {}, B(f.fonction), f.titulaires ? ' : ' + f.titulaires : '')))));
     z.append(puces, liste, legende,
-      el('p', { class: 'petit' }, 'Les modifications du RACI se décident en réunion de bureau, puis sont reportées par le responsable informatique.'));
+      el('p', { class: 'petit' }, 'Les modifications du RACI se décident en réunion des présidents, du trésorier et du secrétaire, puis sont reportées par le responsable informatique.'));
   }
 
   return { ouvrir };

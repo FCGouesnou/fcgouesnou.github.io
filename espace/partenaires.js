@@ -5,7 +5,8 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 2.1 - 21/11/2026 - dons réservés au bureau (présidents, trésorier, secrétaire, administrateur) :
+  Version : 2.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau » dans les textes affichés
+            2.1 - 21/11/2026 - dons réservés au bureau (présidents, trésorier, secrétaire, administrateur) :
             la commission dépose une « demande de don » (avis par e-mail au bureau), le bureau modifie,
             valide, envoie ou annule ; chaque reçu validé est annoncé par e-mail avec le PDF au trésorier,
             au secrétaire, aux présidents et à la commission
@@ -856,7 +857,7 @@ export function initPartenaires(ctx) {
         el('div', {}, el('strong', {}, String(liste.filter(d => d.recu_statut === 'à valider').length)), el('span', {}, 'reçus à valider')),
         el('div', {}, el('strong', {}, String(liste.filter(d => ['validé', 'envoyé'].includes(d.recu_statut)).length)), el('span', {}, 'reçus validés'))),
       el('p', { class: 'petit' }, 'Dons sans contrepartie des entreprises (Cerfa 16216) et des particuliers (Cerfa 11580). Un contrat avec panneau ou visibilité est du parrainage : facture, pas de reçu. Année civile = année fiscale du donateur.'),
-      S.gereDons ? null : el('p', { class: 'petit' }, 'La commission dépose une demande de don ; le bureau (présidents, trésorier, secrétaire) est prévenu par e-mail et valide le reçu.'),
+      S.gereDons ? null : el('p', { class: 'petit' }, 'La commission dépose une demande de don ; les présidents, le trésorier et le secrétaire sont prévenus par e-mail et valident le reçu.'),
       el('div', { class: 'p-barre' }, selAnnee,
         el('button', { class: 'mini', onclick: () => formDon(null) }, S.gereDons ? '+ Don' : '+ Demande de don'),
         el('button', { class: 'mini', onclick: () => exporterRegistre(liste) }, 'Exporter le registre'),
@@ -875,7 +876,7 @@ export function initPartenaires(ctx) {
     const actions = el('span', { class: 'p-boutons' });
     if (d.recu_statut === 'à valider' && !S.gereDons) {
       actions.append(el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Aperçu du reçu'),
-        el('span', { class: 'petit' }, 'Validation par le bureau'));
+        el('span', { class: 'petit' }, 'Validation par les présidents, le trésorier ou le secrétaire'));
     } else if (d.recu_statut === 'à valider') {
       actions.append(el('button', { class: 'mini', onclick: () => formDon(d) }, 'Modifier'),
         el('button', { class: 'mini', onclick: () => ouvrirRecu(d) }, 'Aperçu du reçu'),
@@ -999,7 +1000,7 @@ export function initPartenaires(ctx) {
 
   async function formDon(d) {
     const ent = !d || d.donateur_type === 'entreprise';
-    fenetre(d ? 'Modifier le don' : (S.gereDons ? 'Nouveau don' : 'Demande de don (validation par le bureau)'), (f) => {
+    fenetre(d ? 'Modifier le don' : (S.gereDons ? 'Nouveau don' : 'Demande de don (validée par les présidents, le trésorier ou le secrétaire)'), (f) => {
       const type = el('select', { class: 'champ' }, el('option', { value: 'entreprise', selected: ent }, 'Entreprise (Cerfa 16216)'),
         el('option', { value: 'particulier', selected: !ent }, 'Particulier : licencié, parent, autre (Cerfa 11580)'));
       const selEnt = el('select', { class: 'champ' }, el('option', { value: '' }, 'Entreprise du module Partenaires (facultatif)'),
@@ -1053,7 +1054,7 @@ export function initPartenaires(ctx) {
             if (!d && !S.gereDons && cree) {
               // Demande de la commission : avis par e-mail au bureau (trésorier, secrétaire, présidents)
               const r = await appelRecu({ action: 'avis_demande', don: cree.id });
-              toast(r.msg ? 'Demande enregistrée, avis au bureau non envoyé : ' + r.msg : 'Demande enregistrée : le bureau est prévenu par e-mail.');
+              toast(r.msg ? 'Demande enregistrée, avis non envoyé : ' + r.msg : 'Demande enregistrée : les présidents, le trésorier et le secrétaire sont prévenus par e-mail.');
             } else toast(d ? 'Don modifié.' : 'Don enregistré : reçu à valider.');
             S.vue = 'dons'; S.anneeDons = date.value.slice(0, 4); dessiner();
           } }, 'Enregistrer')));
