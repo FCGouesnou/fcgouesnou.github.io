@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.22 - 21/11/2026 - « Actualiser » recharge aussi l'onglet affiché (Partenaires, Attestations, Frais) et installe
+  Version : 0.23 - 21/11/2026 - RACI : puces de filtre sur une seule ligne qui défile (téléphone)
+            0.22 - 21/11/2026 - « Actualiser » recharge aussi l'onglet affiché (Partenaires, Attestations, Frais) et installe
             une nouvelle version publiée (fichier version.json) ; bouton « Mettre à jour » quand une version est disponible
             0.21 - 21/11/2026 - bouton « ? » : aide adaptée au profil connecté (module aide.js), onglet « RACI du bureau »
             0.20 - 21/11/2026 - Partenaires 2.1 (dons réservés au bureau : demande par la commission, avis par e-mail)
@@ -368,8 +369,9 @@
     .aide-rubrique[open] > summary::after { content: '-'; }
     .aide-texte { padding-bottom: 12px; font-size: .92rem; line-height: 1.5; }
     .aide-texte p { margin: 6px 0; } .aide-texte ul { margin: 6px 0; padding-left: 20px; } .aide-texte li { margin: 4px 0; }
-    .raci-filtres { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-    .raci-puce { background: #eef3fc; color: var(--marine); border: 0; border-radius: 999px; padding: 7px 12px; font-size: .82rem; min-height: 32px; cursor: pointer; }
+    .raci-filtres { display: flex; flex-wrap: nowrap; gap: 6px; margin: 10px -4px; padding: 2px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .raci-filtres::-webkit-scrollbar { display: none; }
+    .raci-puce { flex: 0 0 auto; white-space: nowrap; background: #eef3fc; color: var(--marine); border: 0; border-radius: 999px; padding: 7px 12px; font-size: .82rem; min-height: 32px; cursor: pointer; }
     .raci-puce.actif { background: var(--marine); color: #fff; }
     .raci-domaine { font-family: Sora, Inter, sans-serif; color: var(--marine); margin: 16px 0 6px; font-size: .95rem; }
     .raci-liste { display: grid; gap: 8px; }
@@ -570,7 +572,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.22';
+    const VERSION_APPLI = '0.23';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
