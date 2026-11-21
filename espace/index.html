@@ -6,7 +6,10 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.16 - 21/11/2026 - nouveau look « Nuit de match » (étape 1, habillage) : bandeau stade bleu nuit
+  Version : 0.17 - 21/11/2026 - nouveau look, étape 2 : carte « Prochain match » en vedette (écussons, compte à
+           rebours, lieu, réponses, barre de présence, covoiturage, tâches) ; en-tête sur deux lignes sur téléphone ;
+           sur grand écran, application plus large et cartes sur plusieurs colonnes
+           0.16 - 21/11/2026 - nouveau look « Nuit de match » (étape 1, habillage) : bandeau stade bleu nuit
            avec « Ici c'est Gouez » en néon (Bungee), titres en Sora, cartes arrondies, cartes de match marquées,
            boutons de réponse plus grands et lumineux, onglets en pastilles, écran de connexion assorti
            0.15.2 - 21/11/2026 - fiche du match : lignes « null » retirées, « sans place » limité aux présents
@@ -340,6 +343,55 @@
     .fenetre { border-radius: 24px 24px 0 0; }
     @media (min-width: 640px) { .fenetre { border-radius: 24px; } }
     .fenetre h3 { font-family: Sora, Inter, sans-serif; font-weight: 700; font-size: 1.2rem; color: var(--marine); }
+
+    /* En-tête : titre puis boutons sur téléphone, une seule ligne sur grand écran */
+    .entete { flex-wrap: wrap; row-gap: 10px; }
+    .entete h2 { flex: 1 1 calc(100% - 60px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(1rem, 4.6vw, 1.2rem); }
+    .entete button { min-height: 36px; padding: 7px 12px; font-size: .82rem; }
+    .entete #btnApercu { margin-left: auto; }
+    @media (min-width: 760px) { .entete { flex-wrap: nowrap; padding-left: max(16px, calc((100vw - 1180px) / 2)); padding-right: max(16px, calc((100vw - 1180px) / 2)); }
+      .entete h2 { flex: 1 1 auto; } .entete #btnApercu { margin-left: 0; } }
+    /* Grand écran : plus large, cartes sur plusieurs colonnes */
+    @media (min-width: 1000px) {
+      .contenu { max-width: 1180px; padding-left: 20px; padding-right: 20px; }
+      #vueAvenir, #vueCoach { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 0 16px; align-items: start; }
+      #vueAvenir > .jour, #vueCoach > .jour, #vueAvenir > .vide, #vueCoach > .vide, #vueCoach > .composer, #vueCoach > .taches-equipes, #vueAvenir > .hero { grid-column: 1 / -1; }
+      .carte-notif, .bandeau-apercu { max-width: 100%; }
+    }
+    @media (min-width: 1000px) {
+      .hero-corps { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); column-gap: 32px; align-items: start; grid-auto-flow: dense; }
+      .hero-corps > * { grid-column: 2; }
+      .hero-corps > .hero-face, .hero-corps > .hero-chips, .hero-corps > .hero-detail, .hero-corps > .consignes { grid-column: 1; }
+      .hero-corps > .personne:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+    }
+    /* Carte « Prochain match » */
+    .hero { background: #fff; border-radius: 24px; box-shadow: 0 18px 40px rgba(16,35,92,.2); overflow: hidden; margin: 6px 0 8px; }
+    .hero-bandeau { background: linear-gradient(90deg, var(--marine), #1d3f9e); color: #fff; padding: 11px 16px; display: flex; align-items: center; gap: 8px; font-size: .78rem; font-weight: 600; }
+    .hero-bandeau .titre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hero-bandeau .quand { background: rgba(255,255,255,.15); padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+    .hero-point { width: 8px; height: 8px; border-radius: 50%; background: #3ee08b; box-shadow: 0 0 8px #3ee08b; animation: pulse 1.6s infinite; flex: none; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+    .hero-corps { padding: 16px; }
+    .hero-face { display: flex; align-items: center; gap: 8px; }
+    .hero-face .equipe { flex: 1; text-align: center; min-width: 0; }
+    .hero-face .equipe strong { display: block; font-family: Sora, Inter, sans-serif; font-size: .9rem; margin-top: 6px; line-height: 1.2; }
+    .hero-ecusson { width: 58px; height: 58px; border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; background: #eef2fb; color: var(--marine); font-family: Sora, Inter, sans-serif; font-weight: 800; font-size: 1.1rem; box-shadow: 0 4px 14px rgba(16,35,92,.18); }
+    img.hero-ecusson { background: #fff; padding: 2px; }
+    .hero-vs { text-align: center; }
+    .hero-vs b { display: block; font-family: Bungee, sans-serif; font-weight: 400; font-size: 1.35rem; color: var(--marine); }
+    .hero-vs span { font-size: .72rem; color: var(--gris); }
+    .hero-chips { display: flex; justify-content: center; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
+    .hero-chip { background: #f2f5fb; border-radius: 12px; padding: 7px 12px; text-align: center; min-width: 60px; }
+    .hero-chip b { display: block; font-family: Sora, Inter, sans-serif; font-weight: 800; font-size: 1.15rem; color: var(--marine); }
+    .hero-chip span { font-size: .68rem; color: var(--gris); }
+    a.hero-lieu { background: var(--marine); color: #fff; border-radius: 12px; padding: 7px 12px; display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 600; text-decoration: none; max-width: 100%; }
+    a.hero-lieu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hero-detail { text-align: center; color: var(--gris); font-size: .82rem; margin-top: 6px; }
+    .hero-presence { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gris-clair); }
+    .hero-barre { flex: 1; }
+    .hero-barre .barre { height: 8px; border-radius: 999px; background: #eef1f7; overflow: hidden; display: flex; }
+    .hero-barre .barre span { height: 100%; }
+    .hero-barre small { display: block; font-size: .74rem; color: var(--gris); margin-top: 5px; }
     /* Connexion */
     #ecranConnexion { flex-direction: column; background: radial-gradient(120% 90% at 80% -10%, #2b55c9 0%, var(--marine) 45%, var(--nuit) 100%); }
     .carte-connexion { border-radius: 26px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
@@ -378,7 +430,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.16 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.17 - pilote</p>
     </main>
   </div>
 
@@ -408,7 +460,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.16 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.17 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -1141,14 +1193,86 @@
       return c;
     }
 
+    // ---------- Carte « Prochain match » (en tête de « À venir ») ----------
+    function initiales(nom) {
+      const mots = String(nom || '').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, ' ').split(/\s+/).filter(m => m && !/^(fc|us|as|gj|es|ent|et|de|la|le)$/i.test(m));
+      return (mots.slice(0, 2).map(m => m[0]).join('') || '?').toUpperCase();
+    }
+    function compteARebours(debut) {
+      const ms = new Date(debut) - Date.now();
+      if (ms <= 0) return [['En cours', '']];
+      const min = Math.floor(ms / 60000), h = Math.floor(min / 60), j = Math.floor(h / 24);
+      return j >= 2 ? [[j, 'jours'], [h % 24, 'heures']] : [[h, 'heures'], [min % 60, 'minutes']];
+    }
+    function quandCourt(debut) {
+      const j = cleJour(debut), auj = cleJour(new Date()), dem = cleJour(Date.now() + 86400000);
+      const hh = heure(debut);
+      if (j === auj) return 'Aujourd\'hui, ' + hh;
+      if (j === dem) return 'Demain, ' + hh;
+      return jourDe(debut).split(' ').slice(0, 3).join(' ') + ', ' + hh;
+    }
+    function heroMatch(evt, avecReponses) {
+      const eq = E.equipes.get(evt.equipe_id);
+      const dest = evt.terrain && evt.terrain.lat ? evt.terrain.lat + ',' + evt.terrain.lon : [evt.lieu, evt.adresse].filter(Boolean).join(', ');
+      const chips = el('div', { class: 'hero-chips' },
+        sansHeure(evt) ? el('div', { class: 'hero-chip' }, el('b', {}, '?'), el('span', {}, 'horaire à confirmer'))
+          : compteARebours(evt.debut).map(([n, l]) => el('div', { class: 'hero-chip', 'data-compte': evt.debut }, el('b', {}, String(n)), el('span', {}, l))),
+        dest ? el('a', { class: 'hero-lieu', target: '_blank', rel: 'noopener', href: 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(dest) },
+          el('span', {}, (evt.lieu || evt.adresse || 'Itinéraire').split(',').slice(-1)[0].replace(/^\s*\d{5}\s*/, '').trim() || 'Itinéraire')) : null);
+      // Barre de présence (réponses de l'équipe)
+      const r = E.resumes.get(evt.id) || [];
+      const n = { present: 0, absent: 0, incertain: 0, sans_reponse: 0 };
+      for (const x of r) if (x.reponse) n[x.reponse]++;
+      const tot = r.length || 1, pct = (k) => (100 * n[k] / tot) + '%';
+      const presence = r.length ? el('div', { class: 'hero-presence' },
+        el('div', { class: 'hero-barre' },
+          el('div', { class: 'barre' }, el('span', { style: 'background:#2fb36b;width:' + pct('present') }),
+            el('span', { style: 'background:#f5a524;width:' + pct('incertain') }), el('span', { style: 'background:#e5484d;width:' + pct('absent') })),
+          el('small', {}, n.present + ' présent' + (n.present > 1 ? 's' : '') + ' · ' + n.incertain + ' incertain' + (n.incertain > 1 ? 's' : '') +
+            ' · ' + n.absent + ' absent' + (n.absent > 1 ? 's' : '') + ' · ' + n.sans_reponse + ' sans réponse'))) : null;
+      const c = el('section', { class: 'hero', 'aria-label': 'Prochain match' },
+        el('div', { class: 'hero-bandeau' }, el('span', { class: 'hero-point' }),
+          el('span', { class: 'titre' }, 'Prochain match' + (evt.titre ? ' · ' + evt.titre : '')),
+          el('span', { class: 'quand' }, sansHeure(evt) ? jourDe(evt.debut) : quandCourt(evt.debut))),
+        el('div', { class: 'hero-corps' },
+          el('div', { class: 'hero-face' },
+            el('div', { class: 'equipe' }, el('img', { class: 'hero-ecusson', src: '../images/logo-fcg.png', alt: '' }), el('strong', {}, eq ? eq.nom : 'FC Gouesnou')),
+            el('div', { class: 'hero-vs' }, el('b', {}, 'VS'), el('span', {}, evt.domicile === false ? 'Extérieur' : 'Domicile')),
+            el('div', { class: 'equipe' }, el('div', { class: 'hero-ecusson' }, initiales(evt.adversaire)), el('strong', {}, evt.adversaire || 'Adversaire à venir'))),
+          chips,
+          evt.rendez_vous ? el('div', { class: 'hero-detail' }, 'Rendez-vous ' + heure(evt.rendez_vous)) : null,
+          ...pastilles(evt).filter(p => !p.classList.contains('p-match')).length ? [el('div', { class: 'hero-detail' }, ...pastilles(evt).filter(p => !p.classList.contains('p-match')))] : [],
+          evt.consignes ? el('div', { class: 'consignes' }, evt.consignes) : null));
+      const corps = c.lastChild;
+      if (avecReponses) for (const cv of E.convocations.filter(x => x.evenement_id === evt.id)) corps.append(blocReponse(evt, cv));
+      if (presence) corps.append(presence);
+      const cvt = blocCovoit(evt); if (cvt) corps.append(cvt);
+      const tc = blocTaches(evt); if (tc) corps.append(tc);
+      const l = listeConvoques(evt); if (l) corps.append(l);
+      return c;
+    }
+    // Compte à rebours mis à jour chaque minute
+    setInterval(() => {
+      const vus = new Set();
+      for (const n of document.querySelectorAll('.hero-chip[data-compte]')) {
+        const d = n.getAttribute('data-compte'); if (vus.has(d)) continue; vus.add(d);
+        const val = compteARebours(d), soeurs = [...document.querySelectorAll('.hero-chip[data-compte="' + d + '"]')];
+        soeurs.forEach((s, i) => { if (val[i]) { s.firstChild.textContent = String(val[i][0]); s.lastChild.textContent = val[i][1]; } });
+      }
+    }, 60000);
+
     function afficherAvenir() {
       const zone = $('vueAvenir'); zone.replaceChildren();
       const mesEvt = new Set(E.convocations.map(c => c.evenement_id));
       const liste = E.evenements.filter(e => mesEvt.has(e.id) || (E.coachees.has(e.equipe_id) && E.miennes.has(e.equipe_id)));
       if (!E.fiches.length) { zone.append(el('p', { class: 'vide' }, "Votre compte n'est relié à aucune fiche du club. Contactez-nous par la rubrique « Nous contacter » du site.")); return; }
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir pour le moment.')); return; }
+      // Le prochain match (non annulé) est mis en vedette, puis retiré de la liste
+      const prochain = liste.find(e => estMatch(e) && e.etat !== 'annule' && new Date(e.debut) > new Date(Date.now() - 2 * 3600 * 1000));
+      if (prochain) zone.append(heroMatch(prochain, true));
       let jour = '';
       for (const evt of liste) {
+        if (evt === prochain) continue;
         const j = jourDe(evt.debut);
         if (j !== jour) { jour = j; zone.append(el('div', { class: 'jour' }, j)); }
         const c = carteEvenement(evt, true);
