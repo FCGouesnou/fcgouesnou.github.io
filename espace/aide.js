@@ -7,7 +7,8 @@
          Onglet « RACI du bureau » : matrice des responsabilités lue dans la base (tables raci et
          raci_fonctions), réservée au bureau ; chaque ligne peut être ouverte plus tard au CODIR.
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
-  Version : 1.0 - 21/11/2026 - première version
+  Version : 1.1 - 21/11/2026 - prise en main : glisser vers le bas, bouton « Mettre à jour »
+            1.0 - 21/11/2026 - première version
 */
 export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte }) {
 
@@ -37,7 +38,8 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       P('L\'Espace club est l\'application du FC Gouesnou. Elle s\'ouvre à l\'adresse fcgouesnou.github.io/espace, avec votre compte Google du club ou un code reçu par e-mail.'),
       L([B('Installer'), ' : sur iPhone, Safari > Partager > « Sur l\'écran d\'accueil » ; sur Android, bouton « Installer l\'application ».'],
         [B('Notifications'), ' : bouton « Activer » du bandeau. Sur iPhone, l\'application doit être installée. Sans notification, un e-mail vous prévient.'],
-        [B('Actualiser'), ' recharge les données ; ', B('Sortir'), ' vous déconnecte de cet appareil.'],
+        [B('Actualiser'), ' (ou glisser l\'écran vers le bas depuis le haut de la page) recharge les données et l\'onglet affiché. Quand une nouvelle version est publiée, le bouton devient « Mettre à jour », en jaune : touchez-le pour l\'installer.'],
+        [B('Sortir'), ' vous déconnecte de cet appareil.'],
         'Aucune notification entre 21 h et 8 h, sauf une annulation du jour même.'),
     ] },
     { id: 'convocations', titre: 'Répondre aux convocations', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, contenu: (p) => [

@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.23 - 21/11/2026 - RACI : puces de filtre sur une seule ligne qui défile (téléphone)
+  Version : 0.24 - 21/11/2026 - glisser l'écran vers le bas pour actualiser ; message de version après « Actualiser »
+            0.23 - 21/11/2026 - RACI : puces de filtre sur une seule ligne qui défile (téléphone)
             0.22 - 21/11/2026 - « Actualiser » recharge aussi l'onglet affiché (Partenaires, Attestations, Frais) et installe
             une nouvelle version publiée (fichier version.json) ; bouton « Mettre à jour » quand une version est disponible
             0.21 - 21/11/2026 - bouton « ? » : aide adaptée au profil connecté (module aide.js), onglet « RACI du bureau »
@@ -360,6 +361,9 @@
     @media (min-width: 760px) { .entete { flex-wrap: nowrap; padding-left: max(16px, calc((100vw - 1180px) / 2)); padding-right: max(16px, calc((100vw - 1180px) / 2)); }
       .entete h2 { flex: 1 1 auto; } .entete #btnApercu { margin-left: 0; } }
     .entete #btnActualiser.nouvelle-version { background: #ffcf4d; color: #10235c; font-weight: 700; box-shadow: 0 0 0 3px rgba(255,207,77,.35); }
+    .tirer { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 6px); left: 50%; transform: translate(-50%, 0); z-index: 60; opacity: 0; pointer-events: none;
+      background: var(--marine); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: .85rem; font-weight: 600; box-shadow: 0 6px 18px rgba(16,35,92,.3); transition: opacity .15s; }
+    .tirer.visible { opacity: 1; } .tirer.pret { background: #ffcf4d; color: #10235c; }
     /* Aide et RACI */
     .entete #btnAide { width: 36px; padding: 0; border-radius: 50%; font-family: Sora, Inter, sans-serif; font-weight: 700; font-size: 1rem; }
     .aide-rubrique { background: #fff; border: 1px solid #e3e9f6; border-radius: 14px; margin: 8px 0; padding: 0 14px; }
@@ -563,7 +567,7 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=2.1';
     import { initAttestations } from './attestations.js?v=1.1';
-    import { initAide } from './aide.js?v=1.0';
+    import { initAide } from './aide.js?v=1.1';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -572,7 +576,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.23';
+    const VERSION_APPLI = '0.24';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -722,16 +726,44 @@
       else if (vue === 'attestations' && A) A.afficher($('vueAttestations'));
       else if (vue === 'frais') afficherFrais();
     }
-    $('btnActualiser').addEventListener('click', async () => {
-      const b = $('btnActualiser');
-      if (b.disabled) return;
-      b.disabled = true;
+    let actualisationEnCours = false;
+    async function actualiser() {
+      if (actualisationEnCours || !session) return;
+      actualisationEnCours = true; $('btnActualiser').disabled = true;
       try {
         const v = await verifierVersion();
         if (v) { toast('Installation de la version ' + v + '...'); location.replace(ADRESSE_APPLI + '?v=' + encodeURIComponent(v)); return; }
         await charger(); majCarteSportEasy(); actualiserVue();
-        toast('Données à jour.');
-      } finally { b.disabled = false; }
+        toast('Données à jour - version ' + VERSION_APPLI + ', la plus récente.');
+      } finally { actualisationEnCours = false; $('btnActualiser').disabled = false; }
+    }
+    $('btnActualiser').addEventListener('click', actualiser);
+
+    // Glisser l'écran vers le bas depuis le haut de la page : même effet que « Actualiser »
+    const TIRER_SEUIL = 80;
+    const tirer = { y0: null, x0: 0, dy: 0 };
+    const indicTirer = el('div', { class: 'tirer' }, 'Tirer pour actualiser');
+    document.body.append(indicTirer);
+    const finTirer = () => { indicTirer.classList.remove('visible', 'pret'); indicTirer.style.transform = ''; };
+    window.addEventListener('touchstart', (e) => {
+      tirer.y0 = null;
+      if (window.scrollY > 0 || !$('fenetre').hidden || $('ecranAppli').hidden || e.touches.length !== 1) return;
+      tirer.y0 = e.touches[0].clientY; tirer.x0 = e.touches[0].clientX; tirer.dy = 0;
+    }, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+      if (tirer.y0 === null) return;
+      const dy = e.touches[0].clientY - tirer.y0, dx = Math.abs(e.touches[0].clientX - tirer.x0);
+      if (dy <= 0 || dx > dy) { tirer.dy = 0; finTirer(); return; }
+      tirer.dy = dy;
+      const pret = dy > TIRER_SEUIL;
+      indicTirer.classList.add('visible'); indicTirer.classList.toggle('pret', pret);
+      indicTirer.textContent = pret ? 'Relâcher pour actualiser' : 'Tirer pour actualiser';
+      indicTirer.style.transform = 'translate(-50%, ' + Math.round(Math.min(dy, 140) / 2) + 'px)';
+    }, { passive: true });
+    window.addEventListener('touchend', () => {
+      if (tirer.y0 === null) return;
+      const go = tirer.dy > TIRER_SEUIL; tirer.y0 = null; tirer.dy = 0; finTirer();
+      if (go) actualiser();
     });
     // Retour sur l'application (téléphone sorti de veille, onglet repris) : signale une nouvelle version
     document.addEventListener('visibilitychange', () => { if (!document.hidden && session) verifierVersion(); });
