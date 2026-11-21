@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.15.1 - 21/11/2026 - nettoyage du vestiaire confié aux coachs jusqu'aux U13 et aux joueurs ensuite
+  Version : 0.15.2 - 21/11/2026 - fiche du match : lignes « null » retirées, « sans place » limité aux présents
+           et incertains ; « x prise(s) sur y »
+           0.15.1 - 21/11/2026 - nettoyage du vestiaire confié aux coachs jusqu'aux U13 et aux joueurs ensuite
            (tâches « joueurs » à partir d'un âge) ; un joueur répond lui-même dès l'âge fixé par le club (16 ans)
            0.15 - 21/11/2026 - fiche de match et tâches du match : ligne « Tâches » sur les cartes de match
            (prendre, libérer, confier), fiche du match pour les coachs et dirigeants (réponses, covoiturage, tâches),
@@ -308,7 +310,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.15.1 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.15.2 - pilote</p>
     </main>
   </div>
 
@@ -338,7 +340,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.15.1 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.15.2 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
@@ -907,7 +909,7 @@
       const prises = t.filter(x => x.personne_id).length;
       const miennes = t.filter(x => x.mien).map(x => x.libelle);
       const texte = el('div', { class: 'texte' }, el('strong', {}, 'Tâches : '),
-        t.length ? prises + ' sur ' + t.length + ' prise' + (prises > 1 ? 's' : '') : 'aucune tâche pour ce match',
+        t.length ? prises + ' prise' + (prises > 1 ? 's' : '') + ' sur ' + t.length : 'aucune tâche pour ce match',
         miennes.length ? el('div', {}, 'Vous : ' + miennes.join(', ')) : null);
       return el('div', { class: 'covoit' }, texte,
         t.length ? el('button', { class: 'mini', onclick: () => ouvrirTaches(evt) }, 'Tâches') : null,
@@ -995,10 +997,13 @@
             v.designation === 'en_attente' ? el('span', { class: 'gris' }, ' - désignation en attente de réponse') : null,
             (v.depart || v.heure) ? el('span', { class: 'gris' }, ' - départ' + (v.depart ? ' ' + v.depart : '') + (v.heure ? ' à ' + heure(v.heure) : '')) : null,
             v.passagers.length ? el('div', { class: 'gris', style: 'padding-left:12px' }, v.passagers.join(', ')) : null));
-        if (fi.domicile === false && fi.sans_place.length) f.append(el('div', { class: 'fm-ligne' }, el('strong', {}, 'Sans place : '), noms(fi.sans_place)));
+        // Sans place : joueurs présents ou incertains qui n'ont pas de voiture (match à l'extérieur)
+        const sansPlace = fi.sans_place.filter(n => fi.presents.includes(n) || fi.incertains.includes(n));
+        if (fi.domicile === false && sansPlace.length) f.append(el('div', { class: 'fm-ligne' }, el('strong', {}, 'Sans place : '), noms(sansPlace)));
         if (fi.demandes.length) f.append(el('div', { class: 'fm-ligne' }, el('strong', {}, 'Cherchent une place : '), noms(fi.demandes)));
         const t = taches || [];
-        f.append(el('div', { class: 'fm-section' }, 'Tâches : ' + t.filter(x => x.personne_id).length + ' sur ' + t.length + ' prises'));
+        const nbPrises = t.filter(x => x.personne_id).length;
+        f.append(el('div', { class: 'fm-section' }, 'Tâches : ' + nbPrises + ' prise' + (nbPrises > 1 ? 's' : '') + ' sur ' + t.length));
         for (const x of t) f.append(el('div', { class: 'fm-ligne' }, x.libelle + ' : ',
           x.personne_id ? el('strong', {}, x.responsable) : el('span', { style: 'color:var(--orange);font-weight:600' }, 'à prendre'),
           x.rotation && x.chez ? el('span', { class: 'gris' }, ' (maillots chez ' + x.chez + ')') : null));
@@ -1213,6 +1218,8 @@
     function ouvrirFenetre(t, remplir) {
       const v = $('fenetre'); v.replaceChildren();
       const f = el('div', { class: 'fenetre' }, el('h3', {}, t));
+      // append() écrirait « null » : les éléments absents (conditions) sont ignorés
+      const ajouter = f.append.bind(f); f.append = (...n) => ajouter(...n.flat().filter(x => x !== null && x !== undefined && x !== false));
       v.append(f); remplir(f); v.hidden = false;
       v.onclick = (e) => { if (e.target === v) fermerFenetre(); };
     }
