@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.17 - 21/11/2026 - nouveau look, étape 2 : carte « Prochain match » en vedette (écussons, compte à
+  Version : 0.18 - 21/11/2026 - look « Nuit de match » étendu à tous les écrans : Mes équipes, Partenaires,
+           Attestations, Frais des coachs, Mises à jour SportEasy et fenêtres (tuiles, listes, onglets, champs)
+           0.17 - 21/11/2026 - nouveau look, étape 2 : carte « Prochain match » en vedette (écussons, compte à
            rebours, lieu, réponses, barre de présence, covoiturage, tâches) ; en-tête sur deux lignes sur téléphone ;
            sur grand écran, application plus large et cartes sur plusieurs colonnes
            0.16 - 21/11/2026 - nouveau look « Nuit de match » (étape 1, habillage) : bandeau stade bleu nuit
@@ -392,6 +394,63 @@
     .hero-barre .barre { height: 8px; border-radius: 999px; background: #eef1f7; overflow: hidden; display: flex; }
     .hero-barre .barre span { height: 100%; }
     .hero-barre small { display: block; font-size: .74rem; color: var(--gris); margin-top: 5px; }
+
+    /* ===== Look « Nuit de match » (0.18) : tous les écrans ===== */
+    .p-titre, .se-groupe, .fm-section, .p-tuile strong, .p-resume strong, .p-ligne-nom, .fr-ligne .fr-tete { font-family: Sora, Inter, sans-serif; }
+    .p-titre { color: var(--marine); font-weight: 700; }
+    .se-groupe, .fm-section { color: var(--marine); font-weight: 700; }
+    /* Tuiles et chiffres clés */
+    .p-tuiles, .p-resume { gap: 12px; }
+    .p-tuile, .p-resume div { border-radius: 18px; padding: 14px 16px; box-shadow: 0 6px 18px rgba(16,35,92,.08); position: relative; overflow: hidden; }
+    .p-tuile::after, .p-resume div::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 0; }
+    .p-tuile strong, .p-resume strong { font-size: 1.45rem; font-weight: 800; color: var(--marine); letter-spacing: -.3px; }
+    .p-tuile span, .p-resume span { font-weight: 500; }
+    .p-tuile.p-cliquable { transition: transform .15s, box-shadow .15s; }
+    .p-tuile.p-cliquable:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(16,35,92,.16); }
+    .p-tuile-large { background: radial-gradient(120% 160% at 90% -40%, #2b55c9 0%, var(--marine) 50%, var(--nuit) 100%); color: #fff; }
+    .p-tuile-large strong { color: #fff; font-size: 1.8rem; }
+    .p-tuile-large span, .p-tuile-large small { color: #c9d7ff; }
+    .p-tuile-large .p-jauge { background: rgba(255,255,255,.15); }
+    .p-jauge { height: 10px; border-radius: 999px; }
+    .p-jauge div { border-radius: 999px; background: linear-gradient(90deg, #2fb36b, #3ee08b); box-shadow: 0 0 10px rgba(62,224,139,.5); }
+    .p-evo { border-radius: 18px; box-shadow: 0 6px 18px rgba(16,35,92,.08); padding: 16px; }
+    .p-evo-rec { background: linear-gradient(180deg, #3d6ee6, var(--marine)); }
+    .p-evo-att { background: #d6def2; }
+    /* Listes */
+    .p-liste { gap: 8px; }
+    .p-ligne { border-radius: 16px; padding: 13px 15px; box-shadow: 0 3px 10px rgba(16,35,92,.06); transition: transform .12s, box-shadow .12s; }
+    button.p-ligne:hover, .p-ligne:hover { box-shadow: 0 8px 20px rgba(16,35,92,.12); }
+    .p-ligne-nom { font-weight: 700; }
+    .p-marque { border-radius: 999px; padding: 3px 9px; font-weight: 600; }
+    .p-barre .champ { border-radius: 14px; }
+    /* Onglets internes en segments */
+    .p-onglets { background: #fff; padding: 5px; border-radius: 16px; box-shadow: 0 6px 18px rgba(16,35,92,.08); gap: 4px; display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .p-onglets::-webkit-scrollbar { display: none; }
+    .p-onglets .onglet { background: transparent; border-radius: 12px; min-height: 38px; padding: 8px 14px; white-space: nowrap; flex: 0 0 auto; }
+    .p-onglets .onglet.actif { background: var(--marine); color: #fff; box-shadow: 0 4px 12px rgba(16,35,92,.3); }
+    /* Fiches, contrats, paiements */
+    .p-contrat { border: 0; background: #f5f8fe; border-radius: 16px; padding: 12px 14px; }
+    .p-paiement { border-left: 0; background: #fff; border-radius: 10px; padding: 7px 10px; }
+    .p-echeance { border-top-color: #e6ebf5; }
+    /* Frais des coachs */
+    .fr-ligne { border-radius: 16px; padding: 12px 14px; box-shadow: 0 3px 10px rgba(16,35,92,.06); }
+    .fr-periode input, .fr-ligne input.km { border-radius: 12px; }
+    /* Mes équipes */
+    .composer { border-radius: 16px; border-color: #9fb6ef; background: #fff; box-shadow: 0 4px 14px rgba(16,35,92,.06); font-family: Sora, Inter, sans-serif; }
+    .taches-equipes .mini { background: #fff; box-shadow: 0 3px 10px rgba(16,35,92,.08); }
+    .details-liste summary { font-weight: 600; }
+    .ligne-joueur { padding: 8px 2px; }
+    /* Fenêtres */
+    .voile { background: rgba(10,22,56,.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    .fenetre { box-shadow: 0 -10px 40px rgba(10,22,56,.3); }
+    .fenetre h3 { margin: -2px -18px 14px; padding: 0 18px 12px; border-bottom: 1px solid #eef1f7; }
+    .fenetre h3::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px; background: #d6def2; margin: -6px auto 12px; }
+    @media (min-width: 640px) { .fenetre h3::before { display: none; } }
+    .champ { border-radius: 14px; border-color: #d6def2; }
+    .champ:focus { outline: 0; border-color: #3d8bff; box-shadow: 0 0 0 3px rgba(124,196,255,.45); }
+    .cv-bloc, .tm-ligne, .se-ligne { border-top-color: #eef1f7; }
+    .bandeau-apercu { border-radius: 18px; }
+    .vide { background: #fff; border-radius: 20px; box-shadow: 0 6px 18px rgba(16,35,92,.06); font-family: Sora, Inter, sans-serif; }
     /* Connexion */
     #ecranConnexion { flex-direction: column; background: radial-gradient(120% 90% at 80% -10%, #2b55c9 0%, var(--marine) 45%, var(--nuit) 100%); }
     .carte-connexion { border-radius: 26px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
@@ -430,7 +489,7 @@
       </section>
 
       <p class="erreur" id="erreurConnexion" hidden></p>
-      <p class="petit" style="margin-top:24px;">Version 0.17 - pilote</p>
+      <p class="petit" style="margin-top:24px;">Version 0.18 - pilote</p>
     </main>
   </div>
 
@@ -460,7 +519,7 @@
       <div id="vuePartenaires" hidden></div>
       <div id="vueAttestations" hidden></div>
       <div id="vueFrais" hidden></div>
-      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.17 - pilote</p>
+      <p class="petit" style="text-align:center; margin-top:28px;">Espace club FC Gouesnou - version 0.18 - pilote</p>
     </div>
     <button class="flottant" id="btnNouvel" hidden>+ Nouvel événement</button>
   </div>
