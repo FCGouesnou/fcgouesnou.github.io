@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.30.1 - 21/11/2026 - un match sans heure reste affiché toute la journée du match (À venir, Mes équipes, Prochain match)
+  Version : 0.30.2 - 21/11/2026 - corrections : boutons « Tâches / Statistiques » de Mes équipes (texte parasite),
+            titre des cartes sur toute la largeur quand il y a plusieurs pastilles
+            0.30.1 - 21/11/2026 - un match sans heure reste affiché toute la journée du match (À venir, Mes équipes, Prochain match)
             0.30 - 21/11/2026 - pastille « Horaire à confirmer » sur les matchs sans heure (U12-U13 : heure SportEasy non fiable)
             0.29 - 21/11/2026 - direct du match (buts, passes, remplacements, cartons, composition, délégué du jour)
             et statistiques des joueurs (module match.js)
@@ -378,6 +380,9 @@
     .adm-jauge span { display: block; height: 100%; background: linear-gradient(90deg, #2f80ed, #10235c); }
     .adm-alerte { color: #c0392b; font-weight: 600; }
     .p-ligne-info small { display: block; text-align: right; }
+    /* En-tête de carte : le titre garde une largeur lisible, les pastilles passent dessous si besoin */
+    .evt-tete { flex-wrap: wrap; row-gap: 6px; }
+    .evt-tete .evt-titre { flex: 1 1 240px; min-width: 0; }
     .pastille.p-horaire { background: #fff1d6; color: #9a5b00; border: 1px solid #ffc861; font-weight: 700; }
     /* Direct du match et statistiques */
     .direct-carte .texte strong { color: var(--marine); }
@@ -631,7 +636,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.30.1';
+    const VERSION_APPLI = '0.30.2';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -1535,7 +1540,7 @@
       // Tâches de match de chaque équipe coachée (lavage, matériel, vestiaire...)
       const eqs = [...E.coachees].map(id => E.equipes.get(id)).filter(Boolean);
       if (eqs.length) zone.append(el('div', { class: 'taches-equipes' },
-        eqs.map(q => [el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom),
+        eqs.flatMap(q => [el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom),
           el('button', { class: 'mini', onclick: () => MT.ouvrirStats(q.id, q.nom) }, 'Statistiques - ' + q.nom)])));
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir. Créez-en un avec le bouton « + Nouvel événement ».')); return; }
       let jour = '';
