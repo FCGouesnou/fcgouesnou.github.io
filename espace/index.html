@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.34 - 21/11/2026 - aide illustrée : captures d'écran dans les rubriques, agrandissables
+  Version : 0.34.1 - 21/11/2026 - iPhone : plus de zoom automatique en touchant un champ (écran trop large après une saisie)
+            0.34 - 21/11/2026 - aide illustrée : captures d'écran dans les rubriques, agrandissables
             0.33 - 21/11/2026 - « ? » > Signaler : bug, évolution ou question avec captures d'écran ; Administration > Retours
             (statut, réponse, notification à l'auteur)
             0.32 - 21/11/2026 - heures « 13h30 » ; rendez-vous mis en évidence ; « Modifié » remplacé par un repère
@@ -118,6 +119,9 @@
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, system-ui, sans-serif; color: var(--texte); background: #f5f7fb; }
     button, input, select, textarea { font: inherit; }
+    /* iPhone : un champ en dessous de 16 px provoque un zoom automatique qui ne se défait pas */
+    @media (pointer: coarse) { input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea { font-size: 16px !important; } }
+    html, body { overflow-x: clip; }
     [hidden] { display: none !important; }
 
     /* Connexion */
@@ -684,7 +688,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.34';
+    const VERSION_APPLI = '0.34.1';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
