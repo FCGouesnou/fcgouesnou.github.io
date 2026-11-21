@@ -9,7 +9,8 @@
          - Statistiques : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs
            de la saison. Toute l'équipe pour les coachs, administrateurs et présidents ; chaque joueur et sa
            famille seulement pour lui (contrôlé par la base : fonctions match_direct et stats_equipe).
-  Version : 1.0 - 21/11/2026 - première version
+  Version : 1.1 - 21/11/2026 - matchs sans heure (minuit, « Horaire à confirmer ») : pas de minute calculée, statut « Jour de match »
+            1.0 - 21/11/2026 - première version
 */
 export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enApercu }) {
   const FUSEAU = 'Europe/Paris';
@@ -19,7 +20,11 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
   let suivi = null; // minuterie d'actualisation du direct
 
   const erreur = (e) => toast('Erreur : ' + (e.message || e));
+  const fmtHM = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, hour: '2-digit', minute: '2-digit' });
+  const fmtCle = new Intl.DateTimeFormat('fr-CA', { timeZone: FUSEAU });
+  const sansHeure = (d) => fmtHM.format(new Date(d.evt.debut)) === '00:00';
   function minuteCourante(d) {
+    if (sansHeure(d)) return null;
     const m = Math.floor((Date.now() - new Date(d.evt.debut)) / 60000);
     if (m < 0) return null;
     return Math.min(m, d.evt.duree + 30);
@@ -27,6 +32,10 @@ export function initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enAperc
   function statut(d) {
     const m = minuteCourante(d);
     if (d.evt.etat === 'annule') return 'Annulé';
+    if (sansHeure(d)) {
+      const j = fmtCle.format(new Date(d.evt.debut)), auj = fmtCle.format(new Date());
+      return j === auj ? 'Jour de match · horaire à confirmer' : j > auj ? 'À venir · horaire à confirmer' : 'Terminé';
+    }
     if (m === null) return 'À venir';
     if (m <= d.evt.duree + 20) return 'En cours · ' + Math.min(m, d.evt.duree) + 'e';
     return 'Terminé';

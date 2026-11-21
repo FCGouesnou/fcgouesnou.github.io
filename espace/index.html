@@ -6,7 +6,8 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.29 - 21/11/2026 - direct du match (buts, passes, remplacements, cartons, composition, délégué du jour)
+  Version : 0.30 - 21/11/2026 - pastille « Horaire à confirmer » sur les matchs sans heure (U12-U13 : heure SportEasy non fiable)
+            0.29 - 21/11/2026 - direct du match (buts, passes, remplacements, cartons, composition, délégué du jour)
             et statistiques des joueurs (module match.js)
             0.28 - 21/11/2026 - motifs d'absence lus par la fonction convocation_motifs : visibles du joueur, de sa famille,
             des coachs et des administrateurs ; les présidents voient seulement « motif renseigné »
@@ -376,6 +377,7 @@
     .adm-jauge span { display: block; height: 100%; background: linear-gradient(90deg, #2f80ed, #10235c); }
     .adm-alerte { color: #c0392b; font-weight: 600; }
     .p-ligne-info small { display: block; text-align: right; }
+    .pastille.p-horaire { background: #fff1d6; color: #9a5b00; border: 1px solid #ffc861; font-weight: 700; }
     /* Direct du match et statistiques */
     .direct-carte .texte strong { color: var(--marine); }
     .direct-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; background: linear-gradient(135deg, #0a1638, #10235c); color: #fff; border-radius: 18px; padding: 16px 14px 12px; margin-bottom: 12px; text-align: center; }
@@ -619,7 +621,7 @@
     import { initPartenaires } from './partenaires.js?v=2.2';
     import { initAttestations } from './attestations.js?v=1.1';
     import { initAide } from './aide.js?v=1.4';
-    import { initMatch } from './match.js?v=1.0';
+    import { initMatch } from './match.js?v=1.1';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -628,7 +630,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.29';
+    const VERSION_APPLI = '0.30';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -948,6 +950,7 @@
       const r = [el('span', { class: 'pastille ' + t }, LIB_TYPE[evt.type] || 'Événement')];
       if (estMatch(evt) && avecGroupes(evt.equipe_id))
         r.push(evt.groupe ? el('span', { class: 'pastille p-groupe' }, 'Équipe ' + evt.groupe) : el('span', { class: 'pastille p-sansgroupe' }, 'Équipe à choisir'));
+      if (estMatch(evt) && sansHeure(evt) && evt.etat !== 'annule') r.push(el('span', { class: 'pastille p-horaire' }, '⏱ Horaire à confirmer'));
       if (evt.etat === 'annule') r.push(el('span', { class: 'pastille p-annule' }, 'Annulé'));
       else if (evt.etat === 'modifie') r.push(el('span', { class: 'pastille p-modifie' }, 'Modifié'));
       return r;
