@@ -5,7 +5,10 @@
          échéances par saison, paiements, documents, historique des actions, mail).
          Lecture : CODIR et commission partenaires ; modification : commission et administrateurs
          (droits appliqués par la base, l'écran ne fait que les refléter).
-  Version : 1.9 - 17/11/2026 - entreprises archivées (fermeture, départ du contact...) : bouton « Archiver » /
+  Version : 2.0 - 21/11/2026 - identité légale des entreprises pour les reçus fiscaux (raison sociale, SIREN,
+            forme juridique, siège), trouvée dans l'annuaire public des entreprises : bloc dans « Coordonnées »
+            (« C'est elle », correction à la main), liste « Identités à vérifier » dans « Dons », don pré-rempli
+            1.9 - 17/11/2026 - entreprises archivées (fermeture, départ du contact...) : bouton « Archiver » /
             « Désarchiver » sur la fiche, choix « Entreprises archivées » dans la liste ; hors listes,
             tableau de bord et relances, historique conservé
             1.8 - 17/11/2026 - rôle « secrétariat » : consultation des partenaires et accès complet aux dons
@@ -670,6 +673,7 @@ export function initPartenaires(ctx) {
   // Coordonnées et contacts
   function sectionCoordonnees(e, contacts) {
     const z = el('div', {});
+    z.append(blocIdentite(e));
     const ro = !S.peutModifier;
     const f = {
       nom: entree(e.nom), statut: choix('Statut partenaire', e.statut, false), secteur: choix('Secteur', e.secteur),
@@ -848,6 +852,7 @@ export function initPartenaires(ctx) {
       el('div', { class: 'p-barre' }, selAnnee,
         el('button', { class: 'mini', onclick: () => formDon(null) }, '+ Don'),
         el('button', { class: 'mini', onclick: () => exporterRegistre(liste) }, 'Exporter le registre'),
+        el('button', { class: 'mini', onclick: () => identitesAVerifier() }, 'Identités à vérifier'),
         S.estAdmin ? el('button', { class: 'mini', onclick: () => formSignature() }, 'Signature des reçus') : null));
     if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun don enregistré en ' + S.anneeDons + '.')); return; }
     for (const statut of ['à valider', 'validé', 'envoyé', 'antérieur', 'annulé']) {
@@ -895,6 +900,84 @@ export function initPartenaires(ctx) {
       el('div', { class: 'p-ligne-info' }, el('strong', {}, eur(d.montant)), actions));
   }
 
+  // ---------- Identité légale (reçus fiscaux) ----------
+  // Raison sociale, SIREN, forme juridique et siège, nécessaires au Cerfa 16216 ; trouvés dans l'annuaire
+  // public des entreprises (table part_siren), choisis ou corrigés par la commission, le trésorier ou le secrétariat.
+  const sirenLisible = (x) => String(x || '').replace(/^(\d{3})(\d{3})(\d{3})$/, '$1 $2 $3');
+  function ligneCandidat(e, c, apres) {
+    return el('div', { class: 'p-paiement' },
+      el('span', {}, el('strong', {}, c.nom), ' · ' + c.forme, el('br'),
+        el('small', {}, [c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') + ' · SIREN ' + sirenLisible(c.siren))),
+      S.peutDons ? el('button', { class: 'mini principal', onclick: async (ev) => {
+        ev.currentTarget.disabled = true;
+        const { error } = await sb.rpc('part_siren_appliquer', { p_entreprise: e.id, p_siren: c.siren });
+        if (error) { toast('Erreur : ' + error.message); ev.currentTarget.disabled = false; return; }
+        toast('Identité enregistrée pour ' + e.nom + '.'); apres();
+      } }, 'C\'est elle') : null);
+  }
+  function blocIdentite(e) {
+    const b = el('div', { class: 'p-contrat' }, el('strong', {}, 'Identité légale (reçus fiscaux)'));
+    if (e.siren || e.raison_sociale) b.append(
+      el('div', {}, [e.raison_sociale || e.nom, e.forme_juridique].filter(Boolean).join(' · ') + (e.siren ? ' · SIREN ' + sirenLisible(e.siren) : '')),
+      el('div', { class: 'petit' }, 'Siège : ' + ([e.siege_adresse, [e.siege_cp, e.siege_ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'non renseigné')),
+      e.identite_source ? el('div', { class: 'petit' }, 'Source : ' + e.identite_source + (e.identite_maj ? ', le ' + dateFr(e.identite_maj.slice(0, 10)) : '')) : null);
+    else b.append(el('div', { class: 'petit' }, 'Non renseignée : nécessaire pour un reçu fiscal (don sans contrepartie).'));
+    const zone = el('div', {});
+    b.append(zone);
+    if (S.peutDons) b.append(el('div', { class: 'p-boutons', style: 'margin-top:8px' },
+      el('button', { class: 'mini', onclick: () => formIdentite(e) }, e.siren ? 'Corriger' : 'Saisir')));
+    sb.from('part_siren').select('*').eq('entreprise_id', e.id).maybeSingle().then(({ data: s }) => {
+      if (!s || !s.candidats || !s.candidats.length) return;
+      const autres = s.candidats.filter(c => c.siren !== e.siren).slice(0, 5);
+      if (!autres.length) return;
+      const liste = autres.map(c => ligneCandidat(e, c, () => rafraichir(e.id)));
+      if (e.siren) zone.append(el('details', { class: 'details-liste' }, el('summary', {}, 'Autres correspondances dans l\'annuaire (' + autres.length + ')'), ...liste));
+      else zone.append(el('p', { class: 'petit', style: 'margin:8px 0 4px' }, 'Correspondances trouvées dans l\'annuaire des entreprises (INSEE) :'), ...liste);
+    });
+    return b;
+  }
+  function formIdentite(e) {
+    fenetre('Identité légale - ' + e.nom, (f) => {
+      const raison = entree(e.raison_sociale || e.nom), siren = entree(e.siren, { inputmode: 'numeric', placeholder: '9 chiffres' }), forme = entree(e.forme_juridique, { placeholder: 'SARL, SAS, EURL, Entrepreneur individuel...' });
+      const adr = entree(e.siege_adresse || e.adresse), cp = entree(e.siege_cp || e.code_postal), ville = entree(e.siege_ville || e.ville);
+      f.append(el('p', { class: 'petit' }, 'Telles qu\'elles figurent sur l\'avis de situation INSEE ou l\'extrait Kbis (annuaire-entreprises.data.gouv.fr).'),
+        champ('Raison sociale', raison), el('div', { class: 'p-deux' }, champ('SIREN', siren), champ('Forme juridique', forme)),
+        champ('Adresse du siège', adr), el('div', { class: 'p-deux' }, champ('Code postal', cp), champ('Ville', ville)),
+        el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => ouvrirFiche(e.id) }, 'Annuler'),
+          el('button', { class: 'btn principal', onclick: async () => {
+            const { error } = await sb.rpc('part_identite_saisir', { p_entreprise: e.id, p_raison: raison.value, p_siren: siren.value, p_forme: forme.value,
+              p_adresse: vide(adr.value) ? casseAdresse(adr.value) : null, p_cp: cp.value, p_ville: vide(ville.value) ? casseNom(ville.value) : null });
+            if (error) { toast('Erreur : ' + error.message); return; }
+            toast('Identité enregistrée.'); rafraichir(e.id);
+          } }, 'Enregistrer')));
+    });
+  }
+  // Liste des entreprises dont l'identité reste à choisir parmi plusieurs correspondances
+  async function identitesAVerifier() {
+    const { data, error } = await sb.from('part_siren').select('entreprise_id, statut, candidats').eq('statut', 'à vérifier');
+    if (error) { toast('Erreur : ' + error.message); return; }
+    const parId = new Map(S.tous.map(e => [e.id, e]));
+    const lignes = (data || []).map(x => ({ ...x, e: parId.get(x.entreprise_id) })).filter(x => x.e && !x.e.archive_le)
+      .sort((a, b) => (a.e.statut === 'Partenaire actif' ? 0 : 1) - (b.e.statut === 'Partenaire actif' ? 0 : 1) || a.e.nom.localeCompare(b.e.nom, 'fr'));
+    fenetre('Identités à vérifier (' + lignes.length + ')', (f) => {
+      f.append(el('p', { class: 'petit' }, 'Pour chaque entreprise, choisissez la bonne correspondance dans l\'annuaire des entreprises, ou « Aucune ». Les partenaires actifs sont en tête. L\'identité sert aux reçus fiscaux.'));
+      if (!lignes.length) f.append(el('p', { class: 'vide' }, 'Rien à vérifier.'));
+      for (const x of lignes) {
+        const bloc = el('div', { class: 'p-contrat' },
+          el('div', { class: 'p-contrat-tete' }, el('strong', {}, x.e.nom), el('span', { class: 'petit' }, [x.e.statut, x.e.ville].filter(Boolean).join(' · ')),
+            el('button', { class: 'mini', onclick: async (ev) => {
+              ev.currentTarget.disabled = true;
+              const { error: e2 } = await sb.rpc('part_siren_ecarter', { p_entreprise: x.entreprise_id });
+              if (e2) { toast('Erreur : ' + e2.message); return; }
+              bloc.remove(); toast('Écartée : identité à saisir à la main si besoin.');
+            } }, 'Aucune')),
+          ...x.candidats.slice(0, 4).map(c => ligneCandidat(x.e, c, () => { bloc.remove(); chargerListe(); })));
+        f.append(bloc);
+      }
+      f.append(el('div', { class: 'boutons' }, el('button', { class: 'btn secondaire', onclick: () => { fermer(); if (S.zone) dessiner(); } }, 'Fermer')));
+    });
+  }
+
   async function formDon(d) {
     const ent = !d || d.donateur_type === 'entreprise';
     fenetre(d ? 'Modifier le don' : 'Nouveau don', (f) => {
@@ -920,9 +1003,13 @@ export function initPartenaires(ctx) {
       type.onchange = maj; maj();
       selEnt.onchange = async () => {
         if (!selEnt.value) return;
-        const { data: e } = await sb.from('part_entreprises').select('nom, adresse, code_postal, ville, email').eq('id', selEnt.value).single();
+        const { data: e } = await sb.from('part_entreprises').select('nom, raison_sociale, siren, forme_juridique, siege_adresse, siege_cp, siege_ville, adresse, code_postal, ville, email').eq('id', selEnt.value).single();
         if (!e) return;
-        nom.value = e.nom || ''; adr.value = e.adresse || ''; cp.value = e.code_postal || ''; ville.value = e.ville || ''; if (!mail.value) mail.value = e.email || '';
+        // Identité légale (siège) en priorité : c'est elle qui figure sur le reçu fiscal
+        nom.value = e.raison_sociale || e.nom || ''; siren.value = e.siren || ''; fj.value = e.forme_juridique || '';
+        adr.value = e.siege_adresse || e.adresse || ''; cp.value = e.siege_cp || e.code_postal || ''; ville.value = e.siege_ville || e.ville || '';
+        if (!mail.value) mail.value = e.email || '';
+        if (!e.siren) toast('Identité légale non renseignée pour cette entreprise : complétez SIREN et forme juridique.');
       };
       f.append(champ('Donateur', type), zEnt, champ('Nom', nom), el('div', { class: 'p-deux' }, zSiren, zFj), champ('Adresse', adr),
         el('div', { class: 'p-deux' }, champ('Code postal', cp), champ('Ville', ville)), champ('E-mail', mail),
