@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.28 - 21/11/2026 - motifs d'absence lus par la fonction convocation_motifs : visibles du joueur, de sa famille,
+  Version : 0.29 - 21/11/2026 - direct du match (buts, passes, remplacements, cartons, composition, délégué du jour)
+            et statistiques des joueurs (module match.js)
+            0.28 - 21/11/2026 - motifs d'absence lus par la fonction convocation_motifs : visibles du joueur, de sa famille,
             des coachs et des administrateurs ; les présidents voient seulement « motif renseigné »
             0.27 - 21/11/2026 - sous-onglets (Administration, Partenaires, Frais) sur une seule ligne qui défile
             0.26 - 21/11/2026 - « Voir en tant que » ouvert aux présidents ; onglet « Administration » (administrateurs) :
@@ -374,6 +376,43 @@
     .adm-jauge span { display: block; height: 100%; background: linear-gradient(90deg, #2f80ed, #10235c); }
     .adm-alerte { color: #c0392b; font-weight: 600; }
     .p-ligne-info small { display: block; text-align: right; }
+    /* Direct du match et statistiques */
+    .direct-carte .texte strong { color: var(--marine); }
+    .direct-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; background: linear-gradient(135deg, #0a1638, #10235c); color: #fff; border-radius: 18px; padding: 16px 14px 12px; margin-bottom: 12px; text-align: center; }
+    .direct-equipe { font-family: Sora, Inter, sans-serif; font-weight: 600; font-size: .95rem; line-height: 1.2; }
+    .direct-chiffres { display: flex; gap: 8px; align-items: center; font-family: Bungee, Sora, sans-serif; }
+    .direct-chiffres b { font-size: 2.4rem; color: #fff; text-shadow: 0 0 14px rgba(124,196,255,.7); }
+    .direct-chiffres span { font-size: 1.6rem; color: #7cc4ff; }
+    .direct-statut { grid-column: 1 / -1; font-size: .8rem; color: #b9d4ff; }
+    .direct-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+    .direct-btn { border: 0; border-radius: 14px; min-height: 52px; font-weight: 700; font-size: .9rem; background: #eef3fc; color: var(--marine); cursor: pointer; }
+    .direct-btn.direct-but { background: #2fb36b; color: #fff; } .direct-btn.direct-but_adverse { background: #e5484d; color: #fff; }
+    .direct-btn.direct-jaune { background: #ffd43b; color: #3d2f00; } .direct-btn.direct-rouge { background: #c0392b; color: #fff; }
+    .direct-fil { display: grid; gap: 6px; }
+    .direct-ligne { display: grid; grid-template-columns: 44px 28px 1fr auto; align-items: center; gap: 8px; background: #fff; border: 1px solid #e3e9f6; border-radius: 12px; padding: 8px 10px; }
+    .direct-minute { font-family: Sora, Inter, sans-serif; font-weight: 700; color: var(--marine); }
+    .direct-icone { text-align: center; font-size: 1.1rem; }
+    .direct-icone.jaune, .direct-icone.rouge { width: 14px; height: 19px; border-radius: 3px; justify-self: center; }
+    .direct-icone.jaune { background: #ffd43b; } .direct-icone.rouge { background: #e5484d; }
+    .direct-texte { display: flex; flex-direction: column; } .direct-texte small { color: var(--gris); }
+    .direct-l-but { border-left: 4px solid #2fb36b; } .direct-l-but_adverse { border-left: 4px solid #e5484d; }
+    .direct-suppr { border: 0; background: transparent; color: #c0392b; font-size: 1.3rem; cursor: pointer; }
+    .direct-form { display: grid; gap: 10px; }
+    .direct-champ { display: grid; gap: 4px; font-size: .85rem; color: var(--gris); } .direct-champ .champ { margin: 0; }
+    .direct-compo { flex-wrap: wrap !important; overflow: visible !important; }
+    .stats-graphe { margin-top: 6px; }
+    .stats-barre { display: grid; grid-template-columns: minmax(90px, 30%) 1fr 56px; align-items: center; gap: 8px; margin: 5px 0; font-size: .85rem; }
+    .stats-nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stats-piste { height: 12px; background: #e8eefb; border-radius: 999px; overflow: hidden; }
+    .stats-piste span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #2f80ed, #10235c); }
+    .stats-val { text-align: right; font-weight: 600; color: var(--marine); }
+    .stats-tableau { overflow-x: auto; background: #fff; border-radius: 14px; border: 1px solid #e3e9f6; }
+    .stats-tableau table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .stats-tableau th, .stats-tableau td { padding: 8px 6px; text-align: center; border-bottom: 1px solid #eef1f7; white-space: nowrap; }
+    .stats-tableau th:first-child, .stats-tableau td:first-child { text-align: left; position: sticky; left: 0; background: #fff; }
+    .stats-tableau th { cursor: pointer; color: var(--gris); font-weight: 600; } .stats-tableau th.actif { color: var(--marine); text-decoration: underline; }
+    .stats-res { font-family: Sora, Inter, sans-serif; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #eef1f7; color: var(--gris); }
+    .stats-res.v { background: #e3f7ec; color: #1f8a4c; } .stats-res.n { background: #eef1f7; color: #4a5568; } .stats-res.d { background: #fde8e8; color: #c0392b; }
     /* Aide et RACI */
     .entete #btnAide { width: 36px; padding: 0; border-radius: 50%; font-family: Sora, Inter, sans-serif; font-weight: 700; font-size: 1rem; }
     .aide-rubrique { background: #fff; border: 1px solid #e3e9f6; border-radius: 14px; margin: 8px 0; padding: 0 14px; }
@@ -579,7 +618,8 @@
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
     import { initPartenaires } from './partenaires.js?v=2.2';
     import { initAttestations } from './attestations.js?v=1.1';
-    import { initAide } from './aide.js?v=1.3';
+    import { initAide } from './aide.js?v=1.4';
+    import { initMatch } from './match.js?v=1.0';
 
     // ---------- Configuration ----------
     const SUPABASE_URL = 'https://ppzzqnkxeslkeijeradc.supabase.co';
@@ -588,7 +628,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.28';
+    const VERSION_APPLI = '0.29';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -599,7 +639,7 @@
     // de la personne connectée renvoient les valeurs calculées pour la personne observée.
     const AP = { actif: null, suisAdmin: false, peutApercu: false };
     const RPC_LECTURE = new Set(['covoiturage_evenements', 'covoit_candidats', 'convocations_evenement', 'composition_journee', 'communes_terrains', 'part_tableau_bord',
-                                 'taches_evenement', 'fiche_match', 'taches_candidats', 'taches_equipe', 'convocation_motifs']);
+                                 'taches_evenement', 'fiche_match', 'taches_candidats', 'taches_equipe', 'convocation_motifs', 'match_direct', 'stats_equipe']);
     const MSG_APERCU = 'Aperçu en lecture seule : aucune modification n\'est enregistrée.';
     function refus() {
       const r = { data: null, error: { message: MSG_APERCU } };
@@ -1221,6 +1261,18 @@
         t.length ? el('button', { class: 'mini', onclick: () => ouvrirTaches(evt) }, 'Tâches') : null,
         coach ? el('button', { class: 'mini', onclick: () => ouvrirFiche(evt.id) }, 'Fiche du match') : null);
     }
+    // Direct du match : bouton sur la carte des matchs (coachs à tout moment, les autres dès 30 min avant)
+    function blocDirect(evt) {
+      if (!estMatch(evt) || evt.etat === 'annule') return null;
+      const coach = E.coachees.has(evt.equipe_id);
+      const debut = new Date(evt.debut).getTime();
+      if (!coach && Date.now() < debut - 30 * 60000) return null;
+      const enCours = Date.now() >= debut && Date.now() < debut + 2.5 * 3600000;
+      return el('div', { class: 'covoit direct-carte' },
+        el('div', { class: 'texte' }, el('strong', {}, enCours ? 'Match en cours' : Date.now() < debut ? 'Direct du match' : 'Résumé du match'),
+          el('div', {}, enCours ? 'Score, buteurs, remplacements en direct' : 'Buts, passes, remplacements, cartons')),
+        el('button', { class: 'mini' + (enCours ? ' principal' : ''), onclick: () => MT.ouvrirDirect(evt.id) }, enCours ? 'Suivre le direct' : 'Ouvrir'));
+    }
     async function actionTache(evt, promesse, message) {
       const { error } = await promesse;
       if (error) { toast('Erreur : ' + (error.message || error)); return; }
@@ -1376,6 +1428,7 @@
       const cpt = compteur(evt); if (cpt) c.append(cpt);
       const cv = blocCovoit(evt); if (cv) c.append(cv);
       const tc = blocTaches(evt); if (tc) c.append(tc);
+      const dr = blocDirect(evt); if (dr) c.append(dr);
       return c;
     }
 
@@ -1434,6 +1487,7 @@
       if (presence) corps.append(presence);
       const cvt = blocCovoit(evt); if (cvt) corps.append(cvt);
       const tc = blocTaches(evt); if (tc) corps.append(tc);
+      const dr = blocDirect(evt); if (dr) corps.append(dr);
       const l = listeConvoques(evt); if (l) corps.append(l);
       return c;
     }
@@ -1474,7 +1528,8 @@
       // Tâches de match de chaque équipe coachée (lavage, matériel, vestiaire...)
       const eqs = [...E.coachees].map(id => E.equipes.get(id)).filter(Boolean);
       if (eqs.length) zone.append(el('div', { class: 'taches-equipes' },
-        eqs.map(q => el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom))));
+        eqs.map(q => [el('button', { class: 'mini', onclick: () => gererTaches(q.id) }, 'Tâches de match - ' + q.nom),
+          el('button', { class: 'mini', onclick: () => MT.ouvrirStats(q.id, q.nom) }, 'Statistiques - ' + q.nom)])));
       if (!liste.length) { zone.append(el('p', { class: 'vide' }, 'Aucun événement à venir. Créez-en un avec le bouton « + Nouvel événement ».')); return; }
       let jour = '';
       for (const evt of liste) {
@@ -1935,6 +1990,8 @@
       return { coach: E.coachees.size > 0, famille, joueur: !famille && [...E.miennes].some(id => !E.coachees.has(id)), vue, apercu: !!AP.actif };
     } });
     $('btnAide').addEventListener('click', () => aide.ouvrir());
+    // Direct du match et statistiques (module match.js)
+    const MT = initMatch({ sb, el, ouvrirFenetre, fermerFenetre, toast, enApercu: () => !!AP.actif });
     async function verifierAdmin() {
       const { data } = await sbReel.rpc('mes_roles');
       AP.suisAdmin = (data || []).some(r => r.role === 'admin');

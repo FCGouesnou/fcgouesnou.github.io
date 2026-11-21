@@ -7,7 +7,8 @@
          Onglet « RACI du bureau » : matrice des responsabilités lue dans la base (tables raci et
          raci_fonctions), réservée au bureau ; chaque ligne peut être ouverte plus tard au CODIR.
          Pendant un « Voir en tant que », l'aide suit le profil de la personne observée.
-  Version : 1.3 - 21/11/2026 - rubriques « Voir en tant que » (présidents) et onglet Administration
+  Version : 1.4 - 21/11/2026 - rubrique « Direct du match et statistiques »
+            1.3 - 21/11/2026 - rubriques « Voir en tant que » (présidents) et onglet Administration
             1.2 - 21/11/2026 - vocabulaire : « présidents, trésorier, secrétaire » au lieu de « bureau », onglet « RACI »
             1.1 - 21/11/2026 - prise en main : glisser vers le bas, bouton « Mettre à jour »
             1.0 - 21/11/2026 - première version
@@ -66,6 +67,14 @@ export function initAide({ sb, el, ouvrirFenetre, fermerFenetre, toast, contexte
       L([B('Je prends'), ' pour vous engager, ', B('Je ne peux plus'), ' pour libérer la tâche.'],
         'Le lavage des maillots est ouvert aux parents, en rotation.',
         'Le nettoyage du vestiaire n\'est jamais confié aux parents : les coachs jusqu\'aux U13, les joueurs à partir des U14.'),
+    ] },
+    { id: 'direct', titre: 'Direct du match et statistiques', vues: ['avenir'], pour: (p) => p.famille || p.joueur || p.coach, contenu: (p) => [
+      P('Sur la carte d\'un match, « Suivre le direct » affiche le score et le fil du match : buts (buteur, passeur, minute), remplacements, cartons. L\'écran se met à jour tout seul toutes les 30 secondes.'),
+      p.coach ? L([B('Saisie'), ' : un bouton par action (But, But adverse, Remplacement, Carton, Note) ; la minute est proposée d\'après l\'heure du coup d\'envoi, modifiable. Une erreur se supprime avec la croix.'],
+          [B('Composition de départ'), ' : touchez les titulaires ; le temps de jeu de chacun en dépend.'],
+          [B('Délégué du match'), ' : confiez la saisie à un parent ou un dirigeant présent ; il est prévenu par notification.'],
+          [B('Statistiques'), ' (onglet Mes équipes ou depuis le direct) : bilan, buteurs, passeurs, temps de jeu, cartons, présence aux entraînements, matchs de la saison.'])
+        : P('« Statistiques » montre les chiffres de votre enfant (ou les vôtres) : matchs joués, temps de jeu, buts, passes, présence aux entraînements. Ceux de toute l\'équipe sont réservés aux coachs.'),
     ] },
     { id: 'equipes', titre: 'Mes équipes (coachs et dirigeants)', vues: ['coach'], pour: (p) => p.coach, contenu: () => [
       P('L\'onglet « Mes équipes » montre quatre semaines d\'événements avec les réponses détaillées, motifs compris.'),
