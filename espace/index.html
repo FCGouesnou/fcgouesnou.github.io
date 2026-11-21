@@ -6,7 +6,9 @@
          réponses aux convocations, vue coach (création d'événements, suivi des réponses,
          composition des équipes A, B, C d'une journée), application installable et notifications
   Fichiers liés : espace/partenaires.js, espace/attestations.js, espace/manifest.webmanifest, espace/sw.js, espace/icone-*.png
-  Version : 0.30.2 - 21/11/2026 - corrections : boutons « Tâches / Statistiques » de Mes équipes (texte parasite),
+  Version : 0.31 - 21/11/2026 - fenêtres : croix de fermeture toujours visible, page derrière bloquée (défilement fiable
+            sur iPhone), défilement confiné à la fenêtre, touche Échap ; libellé « Pour tous les matchs »
+            0.30.2 - 21/11/2026 - corrections : boutons « Tâches / Statistiques » de Mes équipes (texte parasite),
             titre des cartes sur toute la largeur quand il y a plusieurs pastilles
             0.30.1 - 21/11/2026 - un match sans heure reste affiché toute la journée du match (À venir, Mes équipes, Prochain match)
             0.30 - 21/11/2026 - pastille « Horaire à confirmer » sur les matchs sans heure (U12-U13 : heure SportEasy non fiable)
@@ -380,6 +382,14 @@
     .adm-jauge span { display: block; height: 100%; background: linear-gradient(90deg, #2f80ed, #10235c); }
     .adm-alerte { color: #c0392b; font-weight: 600; }
     .p-ligne-info small { display: block; text-align: right; }
+    /* Fenêtres : défilement confiné, page derrière bloquée, croix toujours visible */
+    body.modal-ouvert { position: fixed; left: 0; right: 0; overflow: hidden; }
+    .voile { overscroll-behavior: contain; touch-action: none; }
+    .fenetre { max-height: 92vh; max-height: 92dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; position: relative; }
+    .fenetre-barre { position: sticky; top: 0; height: 0; z-index: 6; }
+    .fermer-x { position: absolute; right: -6px; top: 4px; width: 38px; height: 38px; border-radius: 50%; border: 0; background: #eef3fc; color: var(--marine);
+      font-size: 1.5rem; line-height: 1; cursor: pointer; box-shadow: 0 2px 8px rgba(10,22,56,.15); display: flex; align-items: center; justify-content: center; }
+    .fenetre > h3 { padding-right: 44px; }
     /* En-tête de carte : le titre garde une largeur lisible, les pastilles passent dessous si besoin */
     .evt-tete { flex-wrap: wrap; row-gap: 6px; }
     .evt-tete .evt-titre { flex: 1 1 240px; min-width: 0; }
@@ -636,7 +646,7 @@
     const PAGE_CONTACT = 'https://fcgouesnou.github.io/#contact';
     const FUSEAU = 'Europe/Paris';
     // Version de l'application : à changer ici ET dans espace/version.json à chaque publication
-    const VERSION_APPLI = '0.30.2';
+    const VERSION_APPLI = '0.31';
 
     const sbReel = createClient(SUPABASE_URL, SUPABASE_CLE, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true }
@@ -1415,7 +1425,7 @@
           }
         }
         const lib = el('input', { class: 'champ', placeholder: 'Nouvelle tâche (ex. Goûter, Feuille de match)', maxlength: 60 });
-        const quand = el('select', { class: 'champ' }, Object.entries(LIB_QUAND).map(([k, v]) => el('option', { value: k }, 'Pour les ' + v)));
+        const quand = el('select', { class: 'champ' }, Object.entries(LIB_QUAND).map(([k, v]) => el('option', { value: k }, 'Pour ' + (k === 'toujours' ? v : 'les ' + v))));
         const parents = el('input', { type: 'checkbox' });
         f.append(el('div', { class: 'fm-section' }, 'Ajouter une tâche'), lib, quand,
           el('label', { class: 'tm-ligne', style: 'border:0' }, parents, el('span', {}, 'Ouverte aux parents', el('small', {}, 'Sinon réservée aux coachs et dirigeants'))),
@@ -1671,6 +1681,25 @@
       v.onclick = (e) => { if (e.target === v) fermerFenetre(); };
     }
     function fermerFenetre() { $('fenetre').hidden = true; $('fenetre').replaceChildren(); }
+    // Toutes les fenêtres (application et modules) : croix de fermeture, page derrière bloquée, touche Échap
+    (() => {
+      const voile = $('fenetre');
+      let haut = 0;
+      const verrouiller = (oui) => {
+        const b = document.body;
+        if (oui && !b.classList.contains('modal-ouvert')) { haut = window.scrollY; b.style.top = -haut + 'px'; b.classList.add('modal-ouvert'); }
+        else if (!oui && b.classList.contains('modal-ouvert')) { b.classList.remove('modal-ouvert'); b.style.top = ''; window.scrollTo(0, haut); }
+      };
+      new MutationObserver(() => {
+        const f = voile.querySelector(':scope > .fenetre');
+        verrouiller(!voile.hidden && !!f);
+        if (f && !f.querySelector(':scope > .fenetre-barre')) {
+          f.prepend(el('div', { class: 'fenetre-barre' },
+            el('button', { class: 'fermer-x', type: 'button', title: 'Fermer', 'aria-label': 'Fermer', onclick: (e) => { e.stopPropagation(); fermerFenetre(); } }, '×')));
+        }
+      }).observe(voile, { childList: true, attributes: true, attributeFilter: ['hidden'] });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !voile.hidden) fermerFenetre(); });
+    })();
     $('btnNouvel').addEventListener('click', () => formulaireEvenement(null));
 
     const versLocal = (iso) => { if (!iso) return ''; const d = new Date(iso); const p = (n) => String(n).padStart(2, '0');
